@@ -1,7 +1,7 @@
 {
   "name": "on-deploy",
-  "version": "1.0.0",
-  "description": "Rigorous dotfiles requirement deployer — reads wm.requires, verifies each binary, installs the missing ones via the platform deploy script",
+  "version": "1.1.0",
+  "description": "Rigorous dotfiles requirement deployer \u2014 reads wm.requires, verifies each binary, installs the missing ones via the platform deploy script",
   "type": "module",
   "bin": {
     "on-deploy": "./src/index.ts"
