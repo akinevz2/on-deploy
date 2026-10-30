@@ -6,14 +6,16 @@ import { createGeneratedHelpers, registerGeneratedStore } from '@bunli/core'
 
 import Check from '../src/commands/check.js'
 import Deploy from '../src/commands/deploy.js'
+import Provision from '../src/commands/provision.js'
 
 // Narrow list of command names to avoid typeof-cycles in types
-const names = ['check', 'deploy'] as const
+const names = ['check', 'deploy', 'provision'] as const
 type GeneratedNames = typeof names[number]
 
 const modules: Record<GeneratedNames, Command<any>> = {
   'check': Check,
-  'deploy': Deploy
+  'deploy': Deploy,
+  'provision': Provision
 } as const
 
 const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
@@ -33,6 +35,16 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
         'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'resolve + report, run nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
       },
       path: './src/commands/deploy'
+    },
+  'provision': {
+      name: 'provision',
+      description: 'Platform provisioning per deploy.profile: xserver packages, ~/.xinitrc session, greeter',
+      options: {
+        'yes': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'assume yes for every step (non-interactive)', short: 'y', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print what would be done, change nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'profile': { type: 'z.string.optional', required: false, hasDefault: false, description: 'profile file name inside ~/dots (default deploy.profile)', fileType: 'file', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+      },
+      path: './src/commands/provision'
     }
 } as const
 

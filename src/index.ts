@@ -9,6 +9,7 @@
 import { createCLI } from "@bunli/core";
 import deployCommand, { walk } from "./commands/deploy";
 import checkCommand from "./commands/check";
+import provisionCommand from "./commands/provision";
 
 const argv = process.argv.slice(2);
 if (argv.length === 0) {
@@ -35,6 +36,7 @@ const cli = await createCLI({
 
 cli.command(deployCommand);
 cli.command(checkCommand);
+cli.command(provisionCommand);
 
 if (compiled) process.chdir(origCwd);
 
