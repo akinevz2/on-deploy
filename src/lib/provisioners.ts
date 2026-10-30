@@ -269,3 +269,54 @@ export async function verifyWslSession(
     const ok = enabled.out === "enabled" && xok.code === 0;
     return { feature: "wsl-session", ok, detail, problem: ok ? undefined : detail };
 }
+
+/** writeProfileEnv — persist the profile's env lines to
+ *  ~/.config/doftiles/env (the units' optional EnvironmentFile).
+ *  Merge semantics: existing KEY=VALUE lines are replaced in place,
+ *  new keys appended — other profiles' keys survive a switch. */
+export async function writeProfileEnv(
+    profile: { env: string[] }, yes: boolean, dryRun: boolean,
+): Promise<Step> {
+    void yes;
+    const path = join(process.env.HOME!, ".config/doftiles/env");
+    if (dryRun) {
+        return { feature: "wsl-session", ok: true, detail: `would write ${path}: ${profile.env.join(" ")}` };
+    }
+    let current: string[] = [];
+    try { current = (await Bun.file(path).text()).split("\n").filter(Boolean); } catch { /* absent */ }
+    for (const line of profile.env) {
+        const key = line.split("=")[0];
+        current = current.filter((l) => !l.startsWith(`${key}=`));
+        current.push(line);
+    }
+    const dir = path.replace(/\/[^/]+$/, "");
+    Bun.spawnSync(["mkdir", "-p", dir]);
+    await Bun.write(path, current.sort().join("\n") + "\n");
+    return { feature: "wsl-session", ok: true, detail: `${path}: ${current.join(" ")}` };
+}
+
+/** enableUnits — enable --now the profile's systemd user units,
+ *  additively (a second profile's activation leaves the first's units
+ *  running — co-installability). Daemon-reload first so newly stowed
+ *  units are visible. Idempotent: already-enabled units report ok. */
+export async function enableUnits(
+    profile: { units: string[] }, yes: boolean, dryRun: boolean,
+): Promise<Step> {
+    void yes;
+    if (dryRun) {
+        return { feature: "wsl-session", ok: true, detail: `would enable: ${profile.units.join(" ")}` };
+    }
+    Bun.spawnSync(["systemctl", "--user", "daemon-reload"]);
+    const enabled: string[] = [];
+    const failed: string[] = [];
+    for (const unit of profile.units) {
+        const name = unit.endsWith(".service") ? unit : `${unit}.service`;
+        const r = Bun.spawnSync(["systemctl", "--user", "enable", "--now", name]);
+        if ((r.exitCode ?? 1) === 0) enabled.push(name);
+        else failed.push(name);
+    }
+    if (failed.length > 0) {
+        return { feature: "wsl-session", ok: false, detail: `enabled ${enabled.join(" ")}`, problem: `failed: ${failed.join(" ")}` };
+    }
+    return { feature: "wsl-session", ok: true, detail: `enabled ${enabled.join(" ")}` };
+}

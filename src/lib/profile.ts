@@ -1,13 +1,24 @@
-// src/lib/profile.ts — the deploy.profile manifest: which platform
-// provisioning features the deployment wants.
+// src/lib/profile.ts — the deployment profile manifest.
 //
-//   # deploy.profile — one feature per line, '#' comments
-//   xserver
-//   xinitrc
-//   greeter
+//   session = greetd | wsl-systemd | xinit | nested
+//   features = xserver xinitrc greeter        (space-separated, optional)
+//   units = herbst compton dunst ...          (systemd user units to enable)
+//   env = DISPLAY=localhost:0.0               (repeated lines allowed)
 //
-// Absent file or empty = no provisioning (e.g. the WSL2 host: the X
-// server is VcXsrv on Windows, reached over TCP — nothing to install).
+// session: HOW the graphical session starts
+//   - greetd       a display manager owns the console (bare-OS targets)
+//   - wsl-systemd  NO display manager: hlwm runs as the systemd user
+//                  unit herbst.service, waiting for the Windows-side X
+//                  server (VcXsrv) to be reachable — the WSL bypass
+//   - xinit        startx runs ~/.xinitrc (exec herbstluftwm); no DM
+//   - nested       hlwm inside the Xvfb framebuffer (:1), shared over
+//                  VNC (:5901) + browser noVNC (:6081) — the temporary
+//                  profile, co-installable with a primary one
+//
+// env lines are written to ~/.config/doftiles/env by provision; the
+// units read it via EnvironmentFile (profile DISPLAY overrides the
+// hardcoded WSL default). units are enabled additively — activating a
+// second profile does not disable the first's units.
 
 import { join } from "node:path";
 import { DOTS_DIR } from "./dots";
@@ -15,50 +26,85 @@ import { DOTS_DIR } from "./dots";
 export const FEATURES = ["xserver", "xinitrc", "greeter"] as const;
 export type Feature = (typeof FEATURES)[number];
 
-/** HOW the graphical session starts:
- *  - greetd       a display manager owns the console (bare-OS targets)
- *  - wsl-systemd  NO display manager: hlwm runs as the systemd user
- *                 unit herbst.service, which waits for the Windows-side
- *                 X server (VcXsrv) to be reachable — the WSL bypass */
-export type SessionModel = "greetd" | "wsl-systemd";
+export type SessionModel = "greetd" | "wsl-systemd" | "xinit" | "nested";
+const SESSIONS: ReadonlySet<string> = new Set([
+    "greetd", "wsl-systemd", "xinit", "nested",
+]);
 
 export interface Profile {
     features: Feature[];
     session: SessionModel;
+    /** systemd user units this profile enables */
+    units: string[];
+    /** env lines written to ~/.config/doftiles/env (KEY=VALUE) */
+    env: string[];
 }
 
 export async function readProfile(file = "deploy.profile"): Promise<Profile> {
-    const path = join(DOTS_DIR, file);
+    const path = file.includes("/")
+        ? join(DOTS_DIR, file)
+        : join(DOTS_DIR, file);
     const f = Bun.file(path);
-    if (!(await f.exists())) return { features: [], session: "wsl-systemd" };
-    const out: Feature[] = [];
+    if (!(await f.exists())) return { features: [], session: "wsl-systemd", units: [], env: [] };
+
+    const features: Feature[] = [];
     let session: SessionModel | null = null;
+    const units: string[] = [];
+    const env: string[] = [];
+
     for (const line of (await f.text()).split("\n")) {
         const t = line.trim();
         if (!t || t.startsWith("#")) continue;
-        const kv = t.match(/^(\w+)\s*=\s*(\S+)$/);
+        const kv = t.match(/^(\w+)\s*=\s*(.+)$/);
         if (kv) {
-            if (kv[1] !== "session") {
-                throw new Error(`${file}: unknown key '${kv[1]}' (only session=)`);
+            const key = kv[1];
+            const val = kv[2].trim();
+            if (key === "session") {
+                if (!SESSIONS.has(val)) {
+                    throw new Error(
+                        `${file}: unknown session model '${val}' (${[...SESSIONS].join(" | ")})`,
+                    );
+                }
+                session = val as SessionModel;
+            } else if (key === "features") {
+                for (const w of val.split(/\s+/)) {
+                    if (!(FEATURES as readonly string[]).includes(w)) {
+                        throw new Error(
+                            `${file}: unknown feature '${w}' (known: ${FEATURES.join(", ")})`,
+                        );
+                    }
+                    if (!features.includes(w as Feature)) features.push(w as Feature);
+                }
+            } else if (key === "units") {
+                for (const u of val.split(/\s+/)) {
+                    if (u && !units.includes(u)) units.push(u);
+                }
+            } else if (key === "env") {
+                if (!/^[A-Za-z_][A-Za-z0-9_]*=/.test(val)) {
+                    throw new Error(`${file}: malformed env line '${val}' (want KEY=VALUE)`);
+                }
+                env.push(val);
+            } else {
+                throw new Error(`${file}: unknown key '${key}' (session | features | units | env)`);
             }
-            if (kv[2] !== "greetd" && kv[2] !== "wsl-systemd") {
-                throw new Error(`${file}: unknown session model '${kv[2]}' (greetd | wsl-systemd)`);
-            }
-            session = kv[2];
             continue;
         }
+        // bare feature words stay supported (the original one-per-line form)
         const word = t.split(/\s+/)[0];
         if (!(FEATURES as readonly string[]).includes(word)) {
             throw new Error(`${file}: unknown feature '${word}' (known: ${FEATURES.join(", ")})`);
         }
-        if (!out.includes(word as Feature)) out.push(word as Feature);
+        if (!features.includes(word as Feature)) features.push(word as Feature);
     }
+
     // model resolution: an explicit session line wins; greeter implies
-    // greetd; anything else defaults to the WSL systemd bypass
+    // greetd; otherwise wsl-systemd (the historical default)
     const model: SessionModel =
-        session ?? (out.includes("greeter") ? "greetd" : "wsl-systemd");
-    if (model === "wsl-systemd" && out.includes("greeter")) {
-        throw new Error(`${file}: session = wsl-systemd conflicts with the greeter feature`);
+        session ?? (features.includes("greeter") ? "greetd" : "wsl-systemd");
+    if (model !== "greetd" && features.includes("greeter")) {
+        throw new Error(
+            `${file}: session = ${model} conflicts with the greeter feature (greetd owns the console)`,
+        );
     }
-    return { features: out, session: model };
+    return { features, session: model, units, env };
 }

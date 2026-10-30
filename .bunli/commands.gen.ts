@@ -7,15 +7,17 @@ import { createGeneratedHelpers, registerGeneratedStore } from '@bunli/core'
 import Check from '../src/commands/check.js'
 import Deploy from '../src/commands/deploy.js'
 import Provision from '../src/commands/provision.js'
+import Snapshot from '../src/commands/snapshot.js'
 
 // Narrow list of command names to avoid typeof-cycles in types
-const names = ['check', 'deploy', 'provision'] as const
+const names = ['check', 'deploy', 'provision', 'snapshot'] as const
 type GeneratedNames = typeof names[number]
 
 const modules: Record<GeneratedNames, Command<any>> = {
   'check': Check,
   'deploy': Deploy,
-  'provision': Provision
+  'provision': Provision,
+  'snapshot': Snapshot
 } as const
 
 const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
@@ -45,6 +47,14 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
         'profile': { type: 'z.string.optional', required: false, hasDefault: false, description: 'profile file name inside ~/dots (default deploy.profile)', fileType: 'file', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
       },
       path: './src/commands/provision'
+    },
+  'snapshot': {
+      name: 'snapshot',
+      description: 'Collect pre-existing user config into ~/dots/defaults/ (restorable; run before the first deploy)',
+      options: {
+        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'list what would be collected, copy nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+      },
+      path: './src/commands/snapshot'
     }
 } as const
 
