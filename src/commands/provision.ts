@@ -5,7 +5,7 @@ import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
 import { checkDotsEnv, readRequires } from "../lib/dots";
 import { readProfile, type Profile } from "../lib/profile";
-import { ensureXServer, ensureXinitrc, ensureGreeter, verifyWslSession, writeProfileEnv, enableUnits } from "../lib/provisioners";
+import { ensureXServer, ensureXinitrc, ensureGreeter, verifyWslSession, writeProfileEnv, enableUnits, ensureNested } from "../lib/provisioners";
 
 export default defineCommand({
     name: "provision",
@@ -69,7 +69,9 @@ export default defineCommand({
                     ? await ensureXServer(target, !!flags.yes, !!flags["dry-run"])
                     : f === "xinitrc"
                         ? await ensureXinitrc(target, !!flags.yes, !!flags["dry-run"])
-                        : await ensureGreeter(target, !!flags.yes, !!flags["dry-run"]);
+                        : f === "nested"
+                            ? await ensureNested(target, !!flags.yes, !!flags["dry-run"])
+                            : await ensureGreeter(target, !!flags.yes, !!flags["dry-run"]);
             const mark = step.ok ? "ok" : "FAILED";
             console.log(`  ${f.padEnd(10)} ${mark} — ${step.detail}${step.problem ? ` (${step.problem})` : ""}`);
             if (!step.ok) failed += 1;

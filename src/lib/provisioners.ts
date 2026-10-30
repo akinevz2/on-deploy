@@ -21,7 +21,7 @@ export interface Step {
     problem?: string;
 }
 
-type Feature2 = "xserver" | "xinitrc" | "greeter" | "wsl-session";
+type Feature2 = "xserver" | "xinitrc" | "greeter" | "nested" | "wsl-session";
 export type { Feature2 as Feature2Name };
 
 function sh(cmd: string, args: string[]): { code: number; out: string } {
@@ -319,4 +319,33 @@ export async function enableUnits(
         return { feature: "wsl-session", ok: false, detail: `enabled ${enabled.join(" ")}`, problem: `failed: ${failed.join(" ")}` };
     }
     return { feature: "wsl-session", ok: true, detail: `enabled ${enabled.join(" ")}` };
+}
+
+
+/** ensureNested — install the nested-stack packages (Xvfb, x11vnc,
+ *  noVNC) through the target's package manager. The units themselves
+ *  are enabled by the profile's units = line. */
+export async function ensureNested(
+    target: string, yes: boolean, dryRun: boolean,
+): Promise<Step> {
+    const arch = target === "manjaro" || target === "arch";
+    const pkgs = arch
+        ? ["xorg-server-xvfb", "x11vnc", "novnc"]
+        : ["xvfb", "x11vnc", "novnc"];
+    const missing = pkgs.filter((p) => !pkgInstalled(target, p));
+    if (missing.length === 0) return { feature: "nested", ok: true, detail: "already installed" };
+    console.log(`  nested: missing ${missing.join(" ")}`);
+    if (!dryRun && !yes) {
+        const ok = await confirm("  install the nested stack packages? [Y/n] ");
+        if (!ok) return { feature: "nested", ok: false, detail: "declined", problem: "declined" };
+    }
+    const mgr = arch ? "pacman" : "apt";
+    const args = arch ? ["-S", "--needed", ...missing] : ["install", "-y", ...missing];
+    const code = await sudo(mgr, args, dryRun);
+    if (code !== 0) return { feature: "nested", ok: false, detail: `exit ${code}`, problem: "package manager failed" };
+    if (dryRun) return { feature: "nested", ok: true, detail: `would install ${missing.join(" ")}` };
+    const still = missing.filter((p) => !pkgInstalled(target, p));
+    return still.length === 0
+        ? { feature: "nested", ok: true, detail: `installed ${missing.join(" ")}` }
+        : { feature: "nested", ok: false, detail: `still missing: ${still.join(" ")}`, problem: "post-verify failed" };
 }

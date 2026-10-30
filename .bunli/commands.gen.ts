@@ -5,16 +5,18 @@ import type { Command, CLI, GeneratedOptionMeta, RegisteredCommands, CommandOpti
 import { createGeneratedHelpers, registerGeneratedStore } from '@bunli/core'
 
 import Check from '../src/commands/check.js'
+import Configure from '../src/commands/configure.js'
 import Deploy from '../src/commands/deploy.js'
 import Provision from '../src/commands/provision.js'
 import Snapshot from '../src/commands/snapshot.js'
 
 // Narrow list of command names to avoid typeof-cycles in types
-const names = ['check', 'deploy', 'provision', 'snapshot'] as const
+const names = ['check', 'configure', 'deploy', 'provision', 'snapshot'] as const
 type GeneratedNames = typeof names[number]
 
 const modules: Record<GeneratedNames, Command<any>> = {
   'check': Check,
+  'configure': Configure,
   'deploy': Deploy,
   'provision': Provision,
   'snapshot': Snapshot
@@ -28,6 +30,17 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
         'json': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'machine-readable output', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
       },
       path: './src/commands/check'
+    },
+  'configure': {
+      name: 'configure',
+      description: 'Edit the deploy target + required-package list of wm.requires (TUI or flags)',
+      options: {
+        'target': { type: 'z.string.optional', required: false, hasDefault: false, description: 'set the deploy target directly', fileType: 'directory', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'add': { type: 'z.string.optional', required: false, hasDefault: false, description: 'comma/space-separated binaries to add', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'remove': { type: 'z.string.optional', required: false, hasDefault: false, description: 'comma/space-separated binaries to remove', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'show': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print the current manifest', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+      },
+      path: './src/commands/configure'
     },
   'deploy': {
       name: 'deploy',

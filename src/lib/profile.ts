@@ -23,7 +23,7 @@
 import { join } from "node:path";
 import { DOTS_DIR } from "./dots";
 
-export const FEATURES = ["xserver", "xinitrc", "greeter"] as const;
+export const FEATURES = ["xserver", "xinitrc", "greeter", "nested"] as const;
 export type Feature = (typeof FEATURES)[number];
 
 export type SessionModel = "greetd" | "wsl-systemd" | "xinit" | "nested";
