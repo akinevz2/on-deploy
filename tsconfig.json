@@ -1,0 +1,13 @@
+{
+    "compilerOptions": {
+        "target": "ES2023",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "strict": true,
+        "noEmit": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "types": ["bun"]
+    },
+    "include": ["src/**/*.ts", "tests/**/*.ts", "bunli.config.ts", "*.config.ts"]
+}

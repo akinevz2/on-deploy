@@ -1,0 +1,29 @@
+{
+  "name": "on-deploy",
+  "version": "1.0.0",
+  "description": "Rigorous dotfiles requirement deployer — reads wm.requires, verifies each binary, installs the missing ones via the platform deploy script",
+  "type": "module",
+  "bin": {
+    "on-deploy": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "bunli dev",
+    "build": "bunli build",
+    "check": "bun src/index.ts check"
+  },
+  "dependencies": {
+    "@bunli/core": "^0.8.2",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "bunli": "^0.8.2",
+    "typescript": "^5"
+  },
+  "engines": {
+    "bun": ">=1.2"
+  },
+  "trustedDependencies": [
+    "bun"
+  ]
+}
