@@ -21,7 +21,7 @@ export interface Step {
     problem?: string;
 }
 
-type Feature2 = "xserver" | "xinitrc" | "greeter";
+type Feature2 = "xserver" | "xinitrc" | "greeter" | "wsl-session";
 export type { Feature2 as Feature2Name };
 
 function sh(cmd: string, args: string[]): { code: number; out: string } {
@@ -251,3 +251,21 @@ export async function ensureGreeter(
 }
 
 export const INSTALL_DIR_NOTE = INSTALL_BIN_DIR;
+
+
+/** The WSL bypass: NO display manager — hlwm runs as the systemd user
+ *  unit herbst.service, which waits (bounded) for the Windows-side X
+ *  server to be reachable. Verify the unit is enabled + X answers;
+ *  nothing to install. */
+export async function verifyWslSession(
+    target: string, yes: boolean, dryRun: boolean,
+): Promise<Step> {
+    void target; void yes; void dryRun;
+    const unit = "herbst.service";
+    const enabled = sh("systemctl", ["--user", "is-enabled", unit]);
+    const active = sh("systemctl", ["--user", "is-active", unit]);
+    const xok = sh("sh", ["-c", "xset -display ${DISPLAY:-localhost:0.0} q"]);
+    const detail = `herbst.service ${enabled.out || "unknown"}/${active.out || "unknown"}, X ${xok.code === 0 ? "reachable" : "UNREACHABLE"}`;
+    const ok = enabled.out === "enabled" && xok.code === 0;
+    return { feature: "wsl-session", ok, detail, problem: ok ? undefined : detail };
+}

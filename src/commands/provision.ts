@@ -4,8 +4,8 @@
 import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
 import { checkDotsEnv, readRequires } from "../lib/dots";
-import { readProfile, type Feature } from "../lib/profile";
-import { ensureXServer, ensureXinitrc, ensureGreeter } from "../lib/provisioners";
+import { readProfile, type Profile } from "../lib/profile";
+import { ensureXServer, ensureXinitrc, ensureGreeter, verifyWslSession } from "../lib/provisioners";
 
 export default defineCommand({
     name: "provision",
@@ -30,21 +30,29 @@ export default defineCommand({
             process.exit(2);
         }
         const { target } = await readRequires();
-        let features: Feature[] = [];
+        let profile: Profile;
         try {
-            features = await readProfile(flags.profile ?? "deploy.profile");
+            profile = await readProfile(flags.profile ?? "deploy.profile");
         } catch (err) {
             console.error(`on-deploy: ${(err as Error).message}`);
             process.exit(2);
         }
-        if (features.length === 0) {
-            console.log(`provision: no features in the profile (${target} target) — nothing to do`);
-            return;
-        }
-        console.log(`provision: target=${target} features=${features.join(",")}`);
+        console.log(`provision: target=${target} session=${profile.session} features=${profile.features.join(",") || "none"}`);
 
         let failed = 0;
-        for (const f of features) {
+        const runStep = async (
+            f: string,
+            run: () => Promise<{ ok: boolean; detail: string; problem?: string }>,
+        ) => {
+            const step = await run();
+            const mark = step.ok ? "ok" : "FAILED";
+            console.log(`  ${f.padEnd(10)} ${mark} — ${step.detail}${step.problem ? ` (${step.problem})` : ""}`);
+            if (!step.ok) failed += 1;
+        };
+        if (profile.session === "wsl-systemd") {
+            await runStep("wsl-session", () => verifyWslSession(target, !!flags.yes, !!flags["dry-run"]));
+        }
+        for (const f of profile.features) {
             const step =
                 f === "xserver"
                     ? await ensureXServer(target, !!flags.yes, !!flags["dry-run"])
