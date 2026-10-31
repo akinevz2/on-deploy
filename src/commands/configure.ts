@@ -54,15 +54,18 @@ function writeManifest(m: Manifest): void {
     writeFileSync(join(DOTS_DIR, "wm.requires"), body.join("\n") + "\n");
 }
 
-/** whiptail through bash for the fd-redirect dance; the answer lands
- *  on our stdout, the TUI draws on the caller's tty (stdin inherited). */
+/** whiptail: the UI draws on stderr and the RESULT is printed to
+ *  stdout — so map stdout=pipe (the captured answer) and leave
+ *  stderr/stdin inherited (the caller's terminal). NO fd dance and no
+ *  bash wrapper: with stderr piped the TUI has no terminal and hangs
+ *  (the bug this replaced). */
 function whiptail(args: string[]): string | null {
-    const quoted = args.map((a) => `'${a.replaceAll("'", String.raw`\x27`)}'`).join(" ");
-    const p = Bun.spawnSync(
-        ["bash", "-c", `whiptail ${quoted} 3>&1 1>&2 2>&3`],
-        { stdout: "pipe", stdin: "inherit", stderr: "pipe" },
-    );
-    if ((p.exitCode ?? 1) !== 0) return null;
+    const p = Bun.spawnSync(["whiptail", ...args], {
+        stdout: "pipe",
+        stderr: "inherit",
+        stdin: "inherit",
+    });
+    if ((p.exitCode ?? 1) !== 0) return null; // cancelled
     return (p.stdout ?? "").toString().trim();
 }
 
