@@ -2,12 +2,7 @@
 // composition (pure functions; no WM, no package manager, no fs).
 
 import { describe, expect, test } from "bun:test";
-import { targetSteps, resolveTarget } from "../src/lib/targets";
-import type { Profile } from "../src/lib/profile";
-
-const p = (over: Partial<Profile> = {}): Profile => ({
-    features: [], session: "wsl-systemd", units: [], env: [], ...over,
-});
+import { resolveTarget, targetSteps } from "../src/lib/targets";
 
 describe("resolveTarget", () => {
     test("wsl-systemd session -> debian-wsl, x server EXTERNAL (apt family)", () => {
@@ -19,8 +14,8 @@ describe("resolveTarget", () => {
 
     test("managed session + apt family -> debian", () => {
         for (const session of ["greetd", "xinit", "nested"] as const) {
-            const pl = resolveTarget("ubuntu", session);
-            expect(pl).toEqual({ key: "debian", externalXServer: false, pkgMgr: "apt" });
+            const t = resolveTarget("ubuntu", session);
+            expect(t).toEqual({ key: "debian", externalXServer: false, pkgMgr: "apt" });
         }
     });
 
@@ -33,9 +28,9 @@ describe("resolveTarget", () => {
     });
 
     test("arch + wsl -> archlinux with the external-X flag (edge)", () => {
-        const pl = resolveTarget("arch", "wsl-systemd");
-        expect(pl.key).toBe("archlinux");
-        expect(pl.externalXServer).toBe(true);
+        const t = resolveTarget("arch", "wsl-systemd");
+        expect(t.key).toBe("archlinux");
+        expect(t.externalXServer).toBe(true);
     });
 
     test("unsupported target -> throws", () => {
@@ -44,29 +39,13 @@ describe("resolveTarget", () => {
 });
 
 describe("targetSteps (generic only — no package groups)", () => {
-    test("wsl deploy target: env + vcxsrv + wsl-session + units", () => {
-        const prof = p({ units: ["herbst"], env: ["DISPLAY=:0"] });
-        const steps = targetSteps(resolveTarget("ubuntu", "wsl-systemd"), prof, false);
-        expect(steps.map((s) => s.name)).toEqual(["env", "vcxsrv", "wsl-session", "units"]);
+    test("wsl platform: vcxsrv + wsl-session", () => {
+        const steps = targetSteps(resolveTarget("ubuntu", "wsl-systemd"), false);
+        expect(steps.map((s) => s.name)).toEqual(["vcxsrv", "wsl-session"]);
     });
 
-    test("managed deploy target: env + units — NO xserver/greeter/nested/xrdp steps", () => {
-        const prof = p({
-            session: "greetd",
-            features: ["greeter", "nested", "xrdp"],
-            units: ["dunst"],
-        });
-        const steps = targetSteps(resolveTarget("arch", "greetd"), prof, false);
-        expect(steps.map((s) => s.name)).toEqual(["env", "units"]);
-    });
-
-    test("no units/env -> no steps on a managed deploy target", () => {
-        const steps = targetSteps(resolveTarget("debian", "greetd"), p({ session: "greetd" }), false);
+    test("managed platform: NO steps", () => {
+        const steps = targetSteps(resolveTarget("arch", "greetd"), false);
         expect(steps).toEqual([]);
-    });
-
-    test("empty profile units on wsl -> vcxsrv only (no unit to verify)", () => {
-        const steps = targetSteps(resolveTarget("ubuntu", "wsl-systemd"), p(), false);
-        expect(steps.map((s) => s.name)).toEqual(["vcxsrv"]);
     });
 });

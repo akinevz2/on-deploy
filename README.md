@@ -50,20 +50,12 @@ two repo-level manifests:
   - `<target>.deploy install <binary>` → prints the install COMMAND
     (which on-deploy then EXECUTES — sudo prompts pass through)
 
-- **`deploy.profile`** — the platform-provisioning manifest:
-  ```ini
-  session = greetd | wsl-systemd   # how the graphical session starts
-  xserver      # X server + xinit packages
-  xinitrc      # ~/.xinitrc execs herbstluftwm
-  greeter      # greetd + tuigreet + the xsessions entry
-  ```
-  `session = wsl-systemd` (the WSL bypass): NO display manager is
-  installed — herbstluftwm runs as the systemd **user** unit
-  `herbst.service`, which waits for the Windows-side X server
-  (VcXsrv, `localhost:0.0`). Provision then only VERIFIES: unit
-  enabled/active + X reachable. A `greeter` feature contradicts a
-  `wsl-systemd` session — that's an error. No profile file (or an
-  empty one) = nothing to provision.
+- **`wm.requires`** (continued) — the optional `session = <model>`
+  line sets the DEPLOYMENT MODEL (default `wsl-systemd`):
+  `wsl-systemd` is the WSL bypass — NO display manager; hlwm runs as
+  the systemd **user** unit and apply only VERIFIES the external X
+  server. Package groups (xserver/nested/xrdp/greeter) are package
+  Makefile rules, not manifest entries.
 
 ## The verbs
 
@@ -111,7 +103,7 @@ entirely from the caller (the package Makefiles). Platform resolution
 
 - deploy target + required binaries (`wm.requires`)
 - deployment model: session + features + services/units
-  (`deploy.profile`)
+  (the wm.requires session line)
 - git credentials — stored in `dots/shell/.my-credentials`
   (gitignored, stowed to ~/.my-credentials), NOT in the user's
   profile; writes the file, regenerates `~/.my-credentials-env`,
@@ -128,8 +120,7 @@ GENERIC step list: `env` (write ~/.config/doftiles/env) -> WSL-only
 units). NO package groups here: those are package Makefile rules
 (`xserver`, `xinitrc`, `nested`, `xrdp`, `greeter` in the
 herbstluftwm package Makefile) — run via `on-deploy packages <rule>`.
-First call with no deploy.profile: the profile TUI runs (persistent
-configuration), non-interactive falls back to defaults.
+Configuration is the configure wizard (`on-deploy configure`).
 
 - `--dry-run` — print the steps
 - `--profile <name>` — read a different profile file from ~/dots
@@ -177,7 +168,6 @@ polyframes artifact per the recorded method (`deps`,
 - `src/lib/dots.ts` — the environment + manifest contract (cwd
   walk-up to the repo root, origin check, wm.requires parsing)
 - `src/lib/deployScript.ts` — the `<target>.deploy` protocol
-- `src/lib/profile.ts` — `deploy.profile` parsing (features + session model)
 - `src/lib/platforms.ts` — platform resolution (debian-wsl | debian |
   archlinux) + generic step composition; apply DELEGATES to it
 - `src/lib/provisioners.ts` — the GENERIC platform operations (env,

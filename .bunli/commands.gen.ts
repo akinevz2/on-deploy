@@ -47,8 +47,7 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
       name: 'apply',
       description: 'Apply the configured deployment: resolve the deploy target (debian-wsl | debian | archlinux), run its generic step list',
       options: {
-        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print what would run', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
-        'profile': { type: 'z.string.optional', required: false, hasDefault: false, description: 'profile file name inside ~/dots (default deploy.profile)', fileType: 'file', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print what would run', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
       },
       path: './src/commands/apply'
     },
@@ -76,8 +75,6 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
         'add': { type: 'z.string.optional', required: false, hasDefault: false, description: 'comma/space-separated binaries to add', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
         'remove': { type: 'z.string.optional', required: false, hasDefault: false, description: 'comma/space-separated binaries to remove', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
         'session': { type: 'z.string.optional', required: false, hasDefault: false, schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
-        'features': { type: 'z.string.optional', required: false, hasDefault: false, description: 'space-separated features (xserver xinitrc greeter nested xrdp)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
-        'units': { type: 'z.string.optional', required: false, hasDefault: false, description: 'space-separated systemd user units to enable', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
         'name': { type: 'z.string.optional', required: false, hasDefault: false, description: 'git user name (three words; stored in dots/shell/.my-credentials)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
         'email': { type: 'z.string.optional', required: false, hasDefault: false, description: 'git user email (stored in dots/shell/.my-credentials)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
         'show': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print the current configuration', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }

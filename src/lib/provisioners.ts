@@ -60,63 +60,17 @@ export async function targetPkg(
     return sudo(pkgMgr, args, dryRun);
 }
 
-/** verifyWslSession — the WSL session verify: the WM user unit
- *  enabled/active + the external X server reachable. The unit name
- *  comes from the PROFILE units (the caller passes it); nothing is
- *  hardcoded. */
-export function verifyWslSession(unit: string): Step {
-    const name = unit.endsWith(".service") ? unit : `${unit}.service`;
-    const enabled = sh("systemctl", ["--user", "is-enabled", name]);
-    const active = sh("systemctl", ["--user", "is-active", name]);
+/** verifyWslSession — the WSL session verify: the external X server
+ *  reachable on the DISPLAY the units use. Unit enablement belongs to
+ *  the dots services flow (service.order / package Makefiles). */
+export function verifyWslSession(): Step {
     const xok = sh("sh", ["-c", "xset -display ${DISPLAY:-localhost:0.0} q"]);
-    const detail = `${name} ${enabled.out || "unknown"}/${active.out || "unknown"}, X ${xok.code === 0 ? "reachable" : "UNREACHABLE"}`;
-    const ok = enabled.out === "enabled" && xok.code === 0;
-    return { name: "wsl-session", ok, detail, problem: ok ? undefined : detail };
-}
-
-/** writeProfileEnv — persist the profile's env lines to
- *  ~/.config/doftiles/env (the units' optional EnvironmentFile).
- *  Merge semantics: existing KEY=VALUE lines are replaced in place,
- *  new keys appended — other profiles' keys survive a switch. */
-export async function writeProfileEnv(env: string[], dryRun: boolean): Promise<Step> {
-    const path = join(process.env.HOME!, ".config/doftiles/env");
-    if (dryRun) {
-        return { name: "env", ok: true, detail: `would write ${path}: ${env.join(" ")}` };
-    }
-    let current: string[] = [];
-    try { current = (await Bun.file(path).text()).split("\n").filter(Boolean); } catch { /* absent */ }
-    for (const line of env) {
-        const key = line.split("=")[0];
-        current = current.filter((l) => !l.startsWith(`${key}=`));
-        current.push(line);
-    }
-    const dir = path.replace(/\/[^/]+$/, "");
-    Bun.spawnSync(["mkdir", "-p", dir]);
-    await Bun.write(path, current.sort().join("\n") + "\n");
-    return { name: "env", ok: true, detail: `${path}: ${current.join(" ")}` };
-}
-
-/** enableUnits — enable --now the profile's systemd user units,
- *  additively (a second profile's activation leaves the first's units
- *  running — co-installability). Daemon-reload first so newly stowed
- *  units are visible. Idempotent: already-enabled units report ok. */
-export function enableUnits(units: string[], dryRun: boolean): Step {
-    if (dryRun) {
-        return { name: "units", ok: true, detail: `would enable: ${units.join(" ")}` };
-    }
-    Bun.spawnSync(["systemctl", "--user", "daemon-reload"]);
-    const enabled: string[] = [];
-    const failed: string[] = [];
-    for (const unit of units) {
-        const name = unit.endsWith(".service") ? unit : `${unit}.service`;
-        const r = Bun.spawnSync(["systemctl", "--user", "enable", "--now", name]);
-        if ((r.exitCode ?? 1) === 0) enabled.push(name);
-        else failed.push(name);
-    }
-    if (failed.length > 0) {
-        return { name: "units", ok: false, detail: `enabled ${enabled.join(" ")}`, problem: `failed: ${failed.join(" ")}` };
-    }
-    return { name: "units", ok: true, detail: `enabled ${enabled.join(" ")}` };
+    const ok = xok.code === 0;
+    return {
+        name: "wsl-session", ok,
+        detail: `X ${ok ? "reachable" : "UNREACHABLE"} (${process.env.DISPLAY ?? "localhost:0.0"})`,
+        problem: ok ? undefined : "X server unreachable",
+    };
 }
 
 /** ensureVcxsrv — the WSL stretch: the Windows-side X server. Checks

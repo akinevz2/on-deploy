@@ -64,67 +64,39 @@ function writeManifest(m: Manifest): void {
     writeFileSync(join(DOTS_DIR, "wm.requires"), body.join("\n") + "\n");
 }
 
-// --- the deployment model (deploy.profile) ---------------------------------
-// The model selects the deploy target implementation (apply): session = HOW
-// the graphical session starts; features = optional stack layers;
-// units = the systemd user services to enable. Comments are preserved;
-// only the session/features/units lines are rewritten.
+// --- the deployment model (the `session =` line of wm.requires) ------------
+// The model selects the deploy target implementation (apply): session =
+// HOW the graphical session starts. wm.requires IS the single manifest —
+// binaries line, optional `session =` line, deploy target line. Comments
+// are preserved; only the session line is rewritten in place.
 
 const SESSIONS = ["greetd", "wsl-systemd", "xinit", "nested"];
-const FEATURES = ["xserver", "xinitrc", "greeter", "nested", "xrdp"];
 
-interface Model {
-    session: string;
-    features: string[];
-    units: string[];
-}
-
-/** the repo's *.service unit names (the services configure can select) */
-function availableUnits(): string[] {
-    const out: string[] = [];
-    const walk = (dir: string): void => {
-        for (const e of readdirSync(dir, { withFileTypes: true })) {
-            const full = join(dir, e.name);
-            if (e.isDirectory() && e.name !== ".git" && e.name !== "node_modules") walk(full);
-            else if (e.name.endsWith(".service")) out.push(e.name.replace(/\.service$/, ""));
-        }
-    };
-    walk(DOTS_DIR);
-    return [...new Set(out)].sort();
-}
-
-function readModel(): Model {
-    const path = join(DOTS_DIR, "deploy.profile");
-    const model: Model = { session: "", features: [], units: [] };
-    if (!existsSync(path)) return model;
-    for (const line of readFileSync(path, "utf8").split("\n")) {
+/** the session model from wm.requires ("" = absent -> apply's default) */
+function readSession(): string {
+    const text = readFileSync(join(DOTS_DIR, "wm.requires"), "utf8");
+    for (const line of text.split("\n")) {
         const t = line.trim();
         if (!t || t.startsWith("#")) continue;
-        const kv = t.match(/^(\w+)\s*=\s*(.+)$/);
-        if (!kv) continue;
-        const val = kv[2].trim();
-        if (kv[1] === "session") model.session = val;
-        else if (kv[1] === "features") model.features = val.split(/\s+/).filter(Boolean);
-        else if (kv[1] === "units") model.units = val.split(/\s+/).filter(Boolean);
+        const kv = t.match(/^session\s*=\s*(.+)$/);
+        if (kv) return kv[1].trim();
     }
-    return model;
+    return "";
 }
 
-/** rewrite ONLY the session/features/units lines, comments kept */
-function writeModel(m: Model): void {
-    const path = join(DOTS_DIR, "deploy.profile");
-    let lines = existsSync(path) ? readFileSync(path, "utf8").split("\n") : [];
-    const set = (key: string, val: string): void => {
-        const re = new RegExp(`^\\s*${key}\\s*=`);
-        const idx = lines.findIndex((l) => re.test(l));
-        const line = `${key} = ${val}`;
-        if (idx >= 0) lines[idx] = line;
-        else lines.push(line);
-    };
-    if (m.session) set("session", m.session);
-    set("features", m.features.join(" "));
-    set("units", m.units.join(" "));
-    writeFileSync(path, lines.join("\n").replace(/\n{3,}/g, "\n\n"));
+/** rewrite ONLY the session line of wm.requires, comments kept */
+function writeSession(session: string): void {
+    const path = join(DOTS_DIR, "wm.requires");
+    const lines = readFileSync(path, "utf8").split("\n");
+    const re = /^\s*session\s*=/;
+    const idx = lines.findIndex((l) => re.test(l));
+    const line = `session = ${session}`;
+    if (idx >= 0) lines[idx] = line;
+    else {
+        const first = lines.findIndex((l) => l.trim() && !l.trim().startsWith("#"));
+        lines.splice(first + 1, 0, line);
+    }
+    writeFileSync(path, lines.join("\n"));
 }
 
 // --- git credentials (dots/shell/.my-credentials, stowed) ------------------
@@ -181,7 +153,6 @@ function validCredentials(name: string, email: string): string {
 // see deploy.ts). Resolves per newline, so scripted feeds work too.
 async function tuiEdit(m: Manifest): Promise<boolean> {
     const list = (): string => m.binaries.join(" ");
-    const model = readModel();
     const cred = readCredentials() as { name: string; email: string; dirty?: boolean };
 
     const toggleList = async (title: string, items: string[], sel: string[]): Promise<void> => {
@@ -206,12 +177,10 @@ async function tuiEdit(m: Manifest): Promise<boolean> {
         console.log("wm.requires");
         console.log(`  1) deploy target    : ${m.target}`);
         console.log(`  2) required binaries: ${list()}`);
-        console.log("deployment model (deploy.profile)");
-        console.log(`  3) session model    : ${model.session || "(default)"}`);
-        console.log(`  4) features         : ${model.features.join(" ") || "(none)"}`);
-        console.log(`  5) services (units) : ${model.units.join(" ") || "(none)"}`);
+        console.log("deployment model (wm.requires session line)");
+        console.log(`  3) session model    : ${readSession() || "(default)"}`);
         console.log("credentials (dots/shell/.my-credentials, stowed)");
-        console.log(`  6) git credentials  : ${cred.name} <${cred.email}>`);
+        console.log(`  4) git credentials  : ${cred.name} <${cred.email}>`);
         console.log("  s) save & exit");
         console.log("  q) quit without saving");
         process.stdout.write("choice: ");
@@ -263,19 +232,12 @@ async function tuiEdit(m: Manifest): Promise<boolean> {
         if (a === "3") {
             console.log(`    session models: ${SESSIONS.join(", ")}`);
             process.stdout.write("    session: ");
+            let model = readSession();
             const t = (await readLine()).trim();
-            if (t && SESSIONS.includes(t)) model.session = t;
+            if (t && SESSIONS.includes(t)) model = t;
             continue;
         }
         if (a === "4") {
-            await toggleList("features", FEATURES, model.features);
-            continue;
-        }
-        if (a === "5") {
-            await toggleList("services (units)", availableUnits(), model.units);
-            continue;
-        }
-        if (a === "6") {
             process.stdout.write(`    name (three words) [${cred.name}]: `);
             const n = (await readLine()).trim() || cred.name;
             process.stdout.write(`    email [${cred.email}]: `);
@@ -288,7 +250,7 @@ async function tuiEdit(m: Manifest): Promise<boolean> {
             continue;
         }
     }
-    writeModel(model);
+    writeSession(readSession());
     if (cred.dirty) {
         for (const note of writeCredentials(cred.name, cred.email)) {
             console.log(`configure: ${note}`);
@@ -314,12 +276,6 @@ export default defineCommand({
         session: option(z.string().optional(), {
             description: `deployment model session (${SESSIONS.join("|")})`,
         }),
-        features: option(z.string().optional(), {
-            description: "space-separated features (xserver xinitrc greeter nested xrdp)",
-        }),
-        units: option(z.string().optional(), {
-            description: "space-separated systemd user units to enable",
-        }),
         name: option(z.string().optional(), {
             description: "git user name (three words; stored in dots/shell/.my-credentials)",
         }),
@@ -337,17 +293,13 @@ export default defineCommand({
             process.exit(2);
         }
         const m = readManifest();
-        const model = readModel();
         const cred = readCredentials();
 
         if (flags.show) {
             console.log(`target:    ${m.target}`);
             console.log(`binaries:  ${m.binaries.join(" ")}`);
-            console.log(`session:   ${model.session || "(default)"}`);
-            console.log(`features:  ${model.features.join(" ") || "(none)"}`);
-            console.log(`units:     ${model.units.join(" ") || "(none)"}`);
+            console.log(`session:   ${readSession() || "(default)"}`);
             console.log(`git:       ${cred.name} <${cred.email}>`);
-            console.log(`services:  ${availableUnits().join(" ")}`);
             return;
         }
 
@@ -366,19 +318,7 @@ export default defineCommand({
                 console.error(`configure: unknown session '${flags.session}' (${SESSIONS.join("|")})`);
                 process.exit(2);
             }
-            model.session = flags.session;
-        }
-        if (flags.features) {
-            for (const f of flags.features.split(/\s+/).filter(Boolean)) {
-                if (!FEATURES.includes(f)) {
-                    console.error(`configure: unknown feature '${f}'`);
-                    process.exit(2);
-                }
-                if (!model.features.includes(f)) model.features.push(f);
-            }
-        }
-        if (flags.units) {
-            model.units = flags.units.split(/\s+/).filter(Boolean);
+            writeSession(flags.session);
         }
         let credNotes: string[] | null = null;
         if (flags.name || flags.email) {
@@ -392,7 +332,7 @@ export default defineCommand({
             credNotes = writeCredentials(n, e);
         }
 
-        const modelDirty = flags.session || flags.features || flags.units;
+        const modelDirty = flags.session;
         if (!flags.target && !flags.add && !flags.remove && !modelDirty && !credNotes) {
             // the menu works on a tty (interactive) and over a pipe
             // (scripted feeds); EOF terminates it with a save
@@ -448,11 +388,7 @@ export default defineCommand({
             );
         }
         writeManifest(m);
-        if (modelDirty) writeModel(model);
         console.log(`configure: target=${m.target} binaries=${m.binaries.join(" ")}`);
-        if (modelDirty) {
-            console.log(`configure: session=${model.session || "(default)"} features=${model.features.join(" ") || "-"} units=${model.units.join(" ") || "-"}`);
-        }
         for (const note of credNotes ?? []) {
             console.log(`configure: ${note}`);
         }

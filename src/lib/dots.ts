@@ -53,14 +53,19 @@ export function checkDotsEnv(): EnvCheck {
 export interface Requires {
     /** line 1: space-separated required binary names */
     binaries: string[];
-    /** last non-comment line: the deploy target ("ubuntu" -> ubuntu.deploy) */
+    /** the `session =` line's value (the deployment model);
+     *  default "wsl-systemd" when the line is absent */
+    session: string;
+    /** the deploy target ("ubuntu" -> ubuntu.deploy) */
     target: string;
 }
 
 /**
- * Parse wm.requires. Line 1 = the required binaries (whitespace-
- * separated); the LAST non-comment line = the deploy target name.
- * Anything else is a structural error.
+ * Parse wm.requires — the SINGLE deployment manifest. Line 1 = the
+ * required binaries (whitespace-separated); an optional
+ * `session = <model>` KEY=VALUE line = the deployment model
+ * (default "wsl-systemd"); the last remaining non-comment line = the
+ * deploy target name. Anything else is a structural error.
  */
 export async function readRequires(file = "wm.requires"): Promise<Requires> {
     const raw = Bun.file(join(DOTS_DIR, file));
@@ -78,7 +83,17 @@ export async function readRequires(file = "wm.requires"): Promise<Requires> {
         if (binaries.length === 0) {
             throw new Error(`${file}: the first line lists no binaries`);
         }
-        return { binaries, target: lines[lines.length - 1] };
+        let session = "wsl-systemd";
+        const rest: string[] = [];
+        for (const line of lines.slice(1)) {
+            const kv = line.match(/^session\s*=\s*(.+)$/);
+            if (kv) session = kv[1].trim();
+            else rest.push(line);
+        }
+        if (rest.length === 0) {
+            throw new Error(`${file}: no deploy target line`);
+        }
+        return { binaries, session, target: rest[rest.length - 1] };
     });
 }
 
