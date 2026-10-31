@@ -2,7 +2,7 @@
 // (or flags): the deploy TARGET and the REQUIRED-PACKAGE list of
 // wm.requires.
 //
-//   on-deploy configure              TUI (whiptail) / plain prompts
+//   on-deploy configure              interactive menu / flags
 //   on-deploy configure --target arch
 //   on-deploy configure --add pkgA,pkgB
 //   on-deploy configure --remove pkgA
@@ -18,6 +18,7 @@ import { z } from "zod";
 import { join } from "node:path";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { checkDotsEnv, DOTS_DIR } from "../lib/dots";
+import { readLine } from "../lib/lines";
 
 const KNOWN_TARGETS = ["ubuntu", "debian", "manjaro", "arch", "fedora"];
 // the candidate catalog for the checklist (the current list is always
@@ -54,72 +55,64 @@ function writeManifest(m: Manifest): void {
     writeFileSync(join(DOTS_DIR, "wm.requires"), body.join("\n") + "\n");
 }
 
-/** whiptail: the UI draws on stderr and the RESULT is printed to
- *  stdout — so map stdout=pipe (the captured answer) and leave
- *  stderr/stdin inherited (the caller's terminal). NO fd dance and no
- *  bash wrapper: with stderr piped the TUI has no terminal and hangs
- *  (the bug this replaced). */
-function whiptail(args: string[]): string | null {
-    const p = Bun.spawnSync(["whiptail", ...args], {
-        stdout: "pipe",
-        stderr: "inherit",
-        stdin: "inherit",
-    });
-    if ((p.exitCode ?? 1) !== 0) return null; // cancelled
-    return (p.stdout ?? "").toString().trim();
-}
-
-function hasTty(): boolean {
-    return process.stdin.isTTY === true;
-}
-
+// One-line stdin reader — NOT node:readline (bun's readline wedges;
+// see deploy.ts). Resolves per newline, so scripted feeds work too.
 async function tuiEdit(m: Manifest): Promise<void> {
-    // 1. deploy target
-    const items: string[] = [];
-    for (const t of KNOWN_TARGETS) {
-        items.push(t, "", t === m.target ? "ON" : "OFF");
-    }
-    const custom = !KNOWN_TARGETS.includes(m.target);
-    items.push("other", "type a custom target name", custom ? "ON" : "OFF");
-    let target = whiptail([
-        "--title", "deploy target",
-        "--radiolist",
-        "Which platform deploy script should on-deploy use?\n(<target>.deploy in ~/.local/bin/install)",
-        "0", "60", "0",
-        ...items,
-    ]);
-    if (target === "other") {
-        target = whiptail([
-            "--title", "custom target", "--inputbox",
-            "Deploy target name (the <name>.deploy script must exist):",
-            "0", "40", m.target,
-        ]);
-    }
-    if (target) m.target = target.trim();
+    const list = (): string => m.binaries.join(" ");
 
-    // 2. required binaries checklist
-    const binItems: string[] = [];
-    const known = [...new Set([...CATALOG, ...m.binaries])];
-    for (const b of known) binItems.push(b, "", m.binaries.includes(b) ? "ON" : "OFF");
-    const picked = whiptail([
-        "--title", "required binaries", "--checklist",
-        "The binaries wm.requires demands (space toggles):",
-        "0", "60", "0",
-        ...binItems,
-    ]);
-    if (picked !== null) {
-        const list = picked.replace(/"/g, "").split(/\s+/).filter(Boolean);
-        const extra = whiptail([
-            "--title", "extra binaries", "--inputbox",
-            "Any additional binary names (space-separated, Enter to skip):",
-            "0", "50", "",
-        ]);
-        if (extra) {
-            for (const e of extra.split(/\s+/)) {
-                if (e && !list.includes(e)) list.push(e);
-            }
+    for (;;) {
+        console.log("");
+        console.log("wm.requires");
+        console.log(`  1) deploy target   : ${m.target}`);
+        console.log(`  2) required binaries: ${list()}`);
+        console.log(`  s) save & exit`);
+        console.log(`  q) quit without saving`);
+        process.stdout.write("choice: ");
+        const a = (await readLine()).trim().toLowerCase();
+        if (a === "s" || a === "") break;
+        if (a === "q") return;
+
+        if (a === "1") {
+            console.log(`    targets: ${KNOWN_TARGETS.join(", ")} — or a custom name`);
+            process.stdout.write("    target: ");
+            const t = (await readLine()).trim();
+            if (t) m.target = t;
+            continue;
         }
-        m.binaries = list;
+        if (a === "2") {
+            console.log("    catalog:");
+            const known = [...new Set([...CATALOG, ...m.binaries])];
+            known.forEach((b, i) =>
+                console.log(`      ${String(i + 1).padStart(2)}) ${m.binaries.includes(b) ? "[x]" : "[ ]"} ${b}`),
+            );
+            process.stdout.write(
+                "    toggle numbers (space-separated, empty=skip): ",
+            );
+            const t = (await readLine()).trim();
+            for (const tok of t.split(/\s+/).filter(Boolean)) {
+                const n = Number.parseInt(tok, 10);
+                if (!Number.isFinite(n) || n < 1 || n > known.length) continue;
+                const b = known[n - 1];
+                const at = m.binaries.indexOf(b);
+                if (at >= 0) m.binaries.splice(at, 1);
+                else m.binaries.push(b);
+            }
+            process.stdout.write(
+                "    additional binaries to ADD (comma-separated, empty=skip): ",
+            );
+            const add = (await readLine()).trim();
+            for (const b of add.split(/[,\s]+/).filter(Boolean)) {
+                if (!m.binaries.includes(b)) m.binaries.push(b);
+            }
+            process.stdout.write(
+                "    binaries to REMOVE (comma-separated, empty=skip): ",
+            );
+            const rm = (await readLine()).trim();
+            m.binaries = m.binaries.filter(
+                (b) => !rm.split(/[,\s]+/).filter(Boolean).includes(b),
+            );
+            continue;
+        }
     }
 }
 
@@ -167,10 +160,8 @@ export default defineCommand({
         }
 
         if (!flags.target && !flags.add && !flags.remove) {
-            if (!hasTty()) {
-                console.error("configure: no TTY — use --target/--add/--remove flags");
-                process.exit(1);
-            }
+            // the menu works on a tty (interactive) and over a pipe
+            // (scripted feeds); EOF terminates it with a save
             await tuiEdit(m);
         }
 

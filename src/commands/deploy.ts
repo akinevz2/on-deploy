@@ -11,43 +11,6 @@ import { resolvePackage, runInstall, installed } from "../lib/deployScript";
 
 const isInteractive = (): boolean => process.stdin.isTTY === true;
 
-// One-line stdin reader — NOT node:readline: bun's readline wedges or
-// rejects ("readline was closed") around spawned processes and stream
-// closes; a raw data-event reader is bulletproof under bun.
-function readLine(): Promise<string> {
-    return new Promise((resolve) => {
-        let buf = "";
-        const dec = new TextDecoder();
-        const done = (value: string) => {
-            process.stdin.off("data", onData);
-            process.stdin.off("end", onEnd);
-            process.stdin.off("close", onEnd);
-            resolve(value);
-        };
-        const onData = (chunk: Uint8Array | string) => {
-            buf += typeof chunk === "string" ? chunk : dec.decode(chunk);
-            const i = buf.indexOf("\n");
-            if (i >= 0) done(buf.slice(0, i));
-        };
-        const onEnd = () => done("");
-        process.stdin.on("data", onData);
-        process.stdin.once("end", onEnd);
-        process.stdin.once("close", onEnd);
-    });
-}
-
-async function confirm(prompt: string): Promise<boolean> {
-    // a non-TTY stdin never EOFs mid-session: a blocking read would
-    // hang forever. Non-interactive runs must say --yes (the dots
-    // house convention: service-action's YES=1 gate).
-    if (!isInteractive()) {
-        console.error("         non-interactive without --yes — skipped");
-        return false;
-    }
-    process.stdout.write(prompt);
-    const a = (await readLine()).trim().toLowerCase();
-    return a === "" || a === "y" || a === "yes"; // [Y/n]: Enter = yes
-}
 
 export async function walk(yes: boolean, dryRun: boolean): Promise<number> {
     const requires = await readRequires();
