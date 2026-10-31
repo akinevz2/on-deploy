@@ -3,7 +3,6 @@
 // Root operations go through sudo (interactive TTY required unless
 // the caller's sudo is passwordless); dryRun prints instead of doing.
 
-import * as readline from "node:readline/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { installed } from "./deployScript";
@@ -61,15 +60,38 @@ function pkgInstalled(target: string, pkg: string): boolean {
     return q.code === 0 && q.out.includes("install ok installed");
 }
 
+// One-line stdin reader — NOT node:readline (bun's readline wedges or
+// rejects around spawned processes; see deploy.ts).
+function readLine(): Promise<string> {
+    return new Promise((resolve) => {
+        let buf = "";
+        const dec = new TextDecoder();
+        const done = (value: string) => {
+            process.stdin.off("data", onData);
+            process.stdin.off("end", onEnd);
+            process.stdin.off("close", onEnd);
+            resolve(value);
+        };
+        const onData = (chunk: Uint8Array | string) => {
+            buf += typeof chunk === "string" ? chunk : dec.decode(chunk);
+            const i = buf.indexOf("\n");
+            if (i >= 0) done(buf.slice(0, i));
+        };
+        const onEnd = () => done("");
+        process.stdin.on("data", onData);
+        process.stdin.once("end", onEnd);
+        process.stdin.once("close", onEnd);
+    });
+}
+
 async function confirm(prompt: string): Promise<boolean> {
     // non-TTY stdin never EOFs mid-session: block-proof the prompt
     if (process.stdin.isTTY !== true) {
         console.log("    non-interactive without --yes — declined");
         return false;
     }
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    const a = (await rl.question(prompt)).trim().toLowerCase();
-    rl.close();
+    process.stdout.write(prompt);
+    const a = (await readLine()).trim().toLowerCase();
     return a === "" || a === "y" || a === "yes";
 }
 
