@@ -5,7 +5,7 @@ import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
 import { checkDotsEnv, readRequires } from "../lib/dots";
 import { readProfile, type Profile } from "../lib/profile";
-import { ensureXServer, ensureXinitrc, ensureGreeter, verifyWslSession, writeProfileEnv, enableUnits, ensureNested } from "../lib/provisioners";
+import { ensureXServer, ensureXinitrc, ensureGreeter, verifyWslSession, writeProfileEnv, enableUnits, ensureNested, ensureVcxsrv } from "../lib/provisioners";
 
 export default defineCommand({
     name: "provision",
@@ -61,6 +61,7 @@ export default defineCommand({
             await runStep("env", () => writeProfileEnv(profile, !!flags.yes, !!flags["dry-run"]));
         }
         if (profile.session === "wsl-systemd") {
+            await runStep("vcxsrv", () => ensureVcxsrv(!!flags.yes, !!flags["dry-run"]));
             await runStep("wsl-session", () => verifyWslSession(target, !!flags.yes, !!flags["dry-run"]));
         }
         for (const f of profile.features) {

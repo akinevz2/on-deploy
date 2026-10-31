@@ -21,7 +21,7 @@ export interface Step {
     problem?: string;
 }
 
-type Feature2 = "xserver" | "xinitrc" | "greeter" | "nested" | "wsl-session";
+type Feature2 = "xserver" | "xinitrc" | "greeter" | "nested" | "vcxsrv" | "wsl-session";
 export type { Feature2 as Feature2Name };
 
 function sh(cmd: string, args: string[]): { code: number; out: string } {
@@ -348,4 +348,70 @@ export async function ensureNested(
     return still.length === 0
         ? { feature: "nested", ok: true, detail: `installed ${missing.join(" ")}` }
         : { feature: "nested", ok: false, detail: `still missing: ${still.join(" ")}`, problem: "post-verify failed" };
+}
+
+/** ensureVcxsrv — the WSL stretch: the Windows-side X server. Checks
+ *  the common VcXsrv install paths on the /mnt/c Windows partition;
+ *  when absent, fetches the latest installer from the SourceForge
+ *  release API (the VcXsrv project's own CDN) and runs it silently
+ *  (InnoSetup /VERYSILENT) through WSL interop. Gated: dry-run
+ *  reports only; the explicit run needs the caller's confirm/--yes. */
+export async function ensureVcxsrv(
+    yes: boolean, dryRun: boolean,
+): Promise<Step> {
+    const candidates = [
+        "/mnt/c/Program Files/VcXsrv/vcxsrv.exe",
+        "/mnt/c/Program Files (x86)/VcXsrv/vcxsrv.exe",
+    ];
+    for (const c of candidates) {
+        if (existsSync(c)) {
+            return { feature: "vcxsrv", ok: true, detail: `installed at ${c}` };
+        }
+    }
+    if (dryRun) {
+        return { feature: "vcxsrv", ok: false, detail: "NOT FOUND on the Windows partition", problem: "would download + install" };
+    }
+    // query the SourceForge best-release API for the current installer
+    const api = "https://sourceforge.net/projects/vcxsrv/best_release.json";
+    const p = Bun.spawnSync(["curl", "-fsSL", api], { stdout: "pipe" });
+    if ((p.exitCode ?? 1) !== 0) {
+        return { feature: "vcxsrv", ok: false, detail: "sourceforge API unreachable", problem: "curl failed" };
+    }
+    let url = "";
+    try {
+        const j = JSON.parse((p.stdout ?? "").toString());
+        // the platform file: prefer the x86_64 windows installer
+        const files = j?.release?.files ?? j?.platforms ?? {};
+        const pick = (Object.values(files) as any[]).find(
+            (f) => /windows.*x86_64|amd64/i.test(String(f?.name ?? "")) && /\.exe$/i.test(String(f?.url ?? "")),
+        ) ?? (Object.values(files) as any[]).find((f) => /\.exe$/i.test(String(f?.url ?? "")));
+        url = pick?.url ?? "";
+        if (url && !url.startsWith("http")) url = `https://downloads.sourceforge.net/project/vcxsrv/${url}`;
+    } catch {
+        return { feature: "vcxsrv", ok: false, detail: "sourceforge API response unparsable", problem: "no installer found" };
+    }
+    if (!url) {
+        return { feature: "vcxsrv", ok: false, detail: "no installer in the release feed", problem: "no installer found" };
+    }
+    if (!yes) {
+        const ok = await confirm(`  download + silently install VcXsrv from\n    ${url}\n  proceed? [y/N] `);
+        if (!ok) return { feature: "vcxsrv", ok: false, detail: "declined", problem: "declined" };
+    }
+    const tmp = "/mnt/c/Users/Public/Downloads/VcXsrv-setup.exe";
+    const dl = Bun.spawnSync(["curl", "-fsSL", "-o", tmp, url]);
+    if ((dl.exitCode ?? 1) !== 0) {
+        return { feature: "vcxsrv", ok: false, detail: `download failed (${url})`, problem: "curl failed" };
+    }
+    // InnoSetup silent install through WSL interop (the exe runs on the
+    // Windows side; /CURRENTUSER keeps it out of the system store)
+    const inst = Bun.spawnSync([tmp, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"], {
+        stdout: "ignore", stderr: "ignore",
+    });
+    if ((inst.exitCode ?? 1) !== 0) {
+        return { feature: "vcxsrv", ok: false, detail: `installer exited ${inst.exitCode}`, problem: "installer failed" };
+    }
+    for (const c of candidates) {
+        if (existsSync(c)) return { feature: "vcxsrv", ok: true, detail: `installed to ${c}` };
+    }
+    return { feature: "vcxsrv", ok: false, detail: "installer ran but vcxsrv.exe not found in the standard paths", problem: "post-verify failed" };
 }
