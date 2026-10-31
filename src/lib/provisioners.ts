@@ -1,7 +1,7 @@
-// src/lib/provisioners.ts — GENERIC platform operations. No package
+// src/lib/provisioners.ts — GENERIC deploy target operations. No package
 // names, no service names, no per-package behavior: every operation
 // takes its target as an argument. The package Makefiles (bash) own
-// the special steps and call `on-deploy pkg ...` for the platform
+// the special steps and call `on-deploy pkg ...` for the deploy target
 // package-manager work.
 //
 // Root operations go through sudo (interactive TTY required unless
@@ -34,18 +34,18 @@ export interface Step {
     problem?: string;
 }
 
-/** is the PLATFORM package `<pkg>` installed? (dpkg-query | pacman -Qi
+/** is the deploy target package `<pkg>` installed? (dpkg-query | pacman -Qi
  *  — resolved by the target family the CALLER passes; no package names
  *  live here) */
-export function platformPkgInstalled(pkgMgr: "apt" | "pacman", pkg: string): boolean {
+export function targetPkgInstalled(pkgMgr: "apt" | "pacman", pkg: string): boolean {
     if (pkgMgr === "pacman") return sh("pacman", ["-Qi", pkg]).code === 0;
     const q = sh("dpkg-query", ["-W", "-f=${Status}", pkg]);
     return q.code === 0 && q.out.includes("install ok installed");
 }
 
-/** the platform package-manager install/remove invocation for the
+/** the deploy target package-manager install/remove invocation for the
  *  NAMES the caller passes */
-export async function platformPkg(
+export async function targetPkg(
     pkgMgr: "apt" | "pacman", op: "install" | "remove",
     names: string[], yes: boolean, dryRun: boolean,
 ): Promise<number> {
@@ -124,7 +124,7 @@ export function enableUnits(units: string[], dryRun: boolean): Step {
  *  when absent, fetches the latest installer from the SourceForge
  *  release API and runs it silently (InnoSetup /VERYSILENT) through
  *  WSL interop. Gated: dry-run reports only; the explicit run needs
- *  the caller's confirm/--yes. PLATFORM code (the external X server
+ *  the caller's confirm/--yes. deploy target code (the external X server
  *  of the wsl-systemd deployment model), not package management. */
 export async function ensureVcxsrv(
     yes: boolean, dryRun: boolean,

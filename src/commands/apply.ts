@@ -1,5 +1,5 @@
 // src/commands/apply.ts — apply the configured deployment to the
-// platform: resolve the platform (debian-wsl | debian | archlinux) and
+// platform: resolve the deploy target (debian-wsl | debian | archlinux) and
 // run its GENERIC step list (env, wsl verify, units). Package-group
 // setup (xserver, nested, xrdp, greeter, xinitrc) is NOT here — those
 // are special steps in the package Makefiles, driven by
@@ -13,7 +13,7 @@ import { runApply } from "../lib/applyCore";
 export default defineCommand({
     name: "apply",
     description:
-        "Apply the configured deployment: resolve the platform (debian-wsl | debian | archlinux), run its generic step list",
+        "Apply the configured deployment: resolve the deploy target (debian-wsl | debian | archlinux), run its generic step list",
     options: {
         "dry-run": option(z.boolean().optional(), {
             description: "print what would run",

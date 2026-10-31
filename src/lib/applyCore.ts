@@ -1,12 +1,12 @@
 // src/lib/applyCore.ts — the apply engine, shared by the `apply` verb
-// and the configure wizard: resolve the platform, run its GENERIC step
+// and the configure wizard: resolve the deploy target, run its GENERIC step
 // list, report per step. Returns the failure count (caller exits).
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { DOTS_DIR, readRequires } from "./dots";
 import { readProfile, type Profile } from "./profile";
-import { platformSteps, resolvePlatform } from "./platforms";
+import { targetSteps, resolveTarget } from "./targets";
 
 const TUI_SCRIPT = join(DOTS_DIR, "scripts", "deploy-menu.sh");
 
@@ -44,16 +44,16 @@ export async function runApply(opts: ApplyOpts = {}): Promise<number> {
     }
     const { target } = await readRequires();
 
-    let platform;
+    let tgt;
     try {
-        platform = resolvePlatform(target, profile.session);
+        tgt = resolveTarget(target, profile.session);
     } catch (err) {
         console.error(`apply: ${(err as Error).message}`);
         return 1;
     }
     console.log(
-        `apply: platform=${platform.key} pkg=${platform.pkgMgr}` +
-        ` xserver=${platform.externalXServer ? "external" : "managed"}`,
+        `apply: target=${tgt.key} pkgmgr=${tgt.pkgMgr}` +
+        ` xserver=${tgt.externalXServer ? "external" : "managed"}`,
     );
     console.log(
         `apply: session=${profile.session}` +
@@ -62,7 +62,7 @@ export async function runApply(opts: ApplyOpts = {}): Promise<number> {
     );
 
     let failed = 0;
-    for (const step of platformSteps(platform, profile, !!opts.dryRun)) {
+    for (const step of targetSteps(tgt, profile, !!opts.dryRun)) {
         const s = await step.run();
         const mark = s.ok ? "ok" : "FAILED";
         console.log(`  ${step.name.padEnd(12)} ${mark} — ${s.detail}${s.problem ? ` (${s.problem})` : ""}`);

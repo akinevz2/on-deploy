@@ -10,7 +10,7 @@
 //   install | start | stop | uninstall | status | disable | enable
 // plus whatever extra rules a package defines (archive/unarchive
 // helpers from on-deploy may be called by those rules — on-deploy
-// itself carries NO per-package code, only per-platform code; the
+// itself carries NO per-package code, only per-target code; the
 // special steps live in the Makefiles' bash).
 
 import { defineCommand } from "@bunli/core";

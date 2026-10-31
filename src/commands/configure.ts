@@ -65,7 +65,7 @@ function writeManifest(m: Manifest): void {
 }
 
 // --- the deployment model (deploy.profile) ---------------------------------
-// The model selects the platform implementation (apply): session = HOW
+// The model selects the deploy target implementation (apply): session = HOW
 // the graphical session starts; features = optional stack layers;
 // units = the systemd user services to enable. Comments are preserved;
 // only the session/features/units lines are rewritten.
@@ -398,7 +398,7 @@ export default defineCommand({
             await tuiEdit(m);
             // the WIZARD: the saved configuration now drives the full
             // deployment — binaries from the repos, each package's
-            // install rule, stow, then the platform apply. Output is
+            // install rule, stow, then the deploy target apply. Output is
             // printed sequentially per phase (the TUI has closed).
             if (process.stdin.isTTY) {
                 const go = whiptailYesNo(
