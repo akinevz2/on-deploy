@@ -53,8 +53,7 @@ export function checkDotsEnv(): EnvCheck {
 export interface Requires {
     /** line 1: space-separated required binary names */
     binaries: string[];
-    /** the `session =` line's value (the deployment model);
-     *  default "wsl-systemd" when the line is absent */
+    /** line 2: the deployment model ("wsl-systemd" when absent) */
     session: string;
     /** the deploy target ("ubuntu" -> ubuntu.deploy) */
     target: string;
@@ -83,17 +82,8 @@ export async function readRequires(file = "wm.requires"): Promise<Requires> {
         if (binaries.length === 0) {
             throw new Error(`${file}: the first line lists no binaries`);
         }
-        let session = "wsl-systemd";
-        const rest: string[] = [];
-        for (const line of lines.slice(1)) {
-            const kv = line.match(/^session\s*=\s*(.+)$/);
-            if (kv) session = kv[1].trim();
-            else rest.push(line);
-        }
-        if (rest.length === 0) {
-            throw new Error(`${file}: no deploy target line`);
-        }
-        return { binaries, session, target: rest[rest.length - 1] };
+        const session = lines.length >= 3 ? lines[1] : "wsl-systemd";
+        return { binaries, session, target: lines[lines.length - 1] };
     });
 }
 

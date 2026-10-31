@@ -67,35 +67,29 @@ function writeManifest(m: Manifest): void {
 // --- the deployment model (the `session =` line of wm.requires) ------------
 // The model selects the deploy target implementation (apply): session =
 // HOW the graphical session starts. wm.requires IS the single manifest —
-// binaries line, optional `session =` line, deploy target line. Comments
+// binaries line, session line, deploy target line (positional). Comments
 // are preserved; only the session line is rewritten in place.
 
 const SESSIONS = ["greetd", "wsl-systemd", "xinit", "nested"];
 
-/** the session model from wm.requires ("" = absent -> apply's default) */
+/** the session model from wm.requires line 2 ("" = absent) */
 function readSession(): string {
-    const text = readFileSync(join(DOTS_DIR, "wm.requires"), "utf8");
-    for (const line of text.split("\n")) {
-        const t = line.trim();
-        if (!t || t.startsWith("#")) continue;
-        const kv = t.match(/^session\s*=\s*(.+)$/);
-        if (kv) return kv[1].trim();
-    }
-    return "";
+    const lines = readFileSync(join(DOTS_DIR, "wm.requires"), "utf8")
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l && !l.startsWith("#"));
+    return lines.length >= 3 ? lines[1] : "";
 }
 
-/** rewrite ONLY the session line of wm.requires, comments kept */
+/** rewrite ONLY the session line (wm.requires line 2), comments kept */
 function writeSession(session: string): void {
     const path = join(DOTS_DIR, "wm.requires");
     const lines = readFileSync(path, "utf8").split("\n");
-    const re = /^\s*session\s*=/;
-    const idx = lines.findIndex((l) => re.test(l));
-    const line = `session = ${session}`;
-    if (idx >= 0) lines[idx] = line;
-    else {
-        const first = lines.findIndex((l) => l.trim() && !l.trim().startsWith("#"));
-        lines.splice(first + 1, 0, line);
-    }
+    const content = lines
+        .map((l, i) => ({ l, i }))
+        .filter(({ l }) => l.trim() && !l.trim().startsWith("#"));
+    if (content.length >= 3) lines[content[1].i] = session;
+    else lines.splice(content[0].i + 1, 0, session);
     writeFileSync(path, lines.join("\n"));
 }
 
@@ -298,7 +292,7 @@ export default defineCommand({
         if (flags.show) {
             console.log(`target:    ${m.target}`);
             console.log(`binaries:  ${m.binaries.join(" ")}`);
-            console.log(`session:   ${readSession() || "(default)"}`);
+            console.log(`session:   ${readSession() || "wsl-systemd (default)"}`);
             console.log(`git:       ${cred.name} <${cred.email}>`);
             return;
         }

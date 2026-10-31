@@ -33,12 +33,13 @@ const APT_FAMILY = new Set(["ubuntu", "debian"]);
 
 const SESSIONS = new Set(["greetd", "wsl-systemd", "xinit", "nested"]);
 
-/** session models configure may select (the `session =` line) */
-export function knownSessions(): string[] {
-    return [...SESSIONS];
-}
-
 export function resolveTarget(target: string, session: string): DeployTarget {
+    if (!SESSIONS.has(session)) {
+        throw new Error(
+            `unknown session model '${session}' ` +
+            `(supported: ${[...SESSIONS].join(", ")})`,
+        );
+    }
     const arch = ARCH_FAMILY.has(target);
     if (session === "wsl-systemd") {
         // WSL: the X server is the Windows app — never installed here.
