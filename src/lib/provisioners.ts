@@ -1,35 +1,22 @@
-// src/lib/provisioners.ts — per-target platform provisioning.
-// Each feature is idempotent: verify -> install/fix -> re-verify.
+// src/lib/provisioners.ts — GENERIC platform operations. No package
+// names, no service names, no per-package behavior: every operation
+// takes its target as an argument. The package Makefiles (bash) own
+// the special steps and call `on-deploy pkg ...` for the platform
+// package-manager work.
+//
 // Root operations go through sudo (interactive TTY required unless
 // the caller's sudo is passwordless); dryRun prints instead of doing.
 
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { installed } from "./deployScript";
 import { confirm } from "./lines";
-import { INSTALL_BIN_DIR } from "./dots";
 
-export interface Target {
-    /** the deploy target from wm.requires ("ubuntu", "manjaro", ...) */
-    name: string;
+export function sh(cmd: string, args: string[]): { code: number; out: string } {
+    const r = Bun.spawnSync([cmd, ...args], { stdout: "pipe" });
+    return { code: r.exitCode ?? 1, out: (r.stdout ?? "").toString().trim() };
 }
 
-export interface Step {
-    feature: Feature2;
-    ok: boolean;
-    detail: string;
-    problem?: string;
-}
-
-type Feature2 = "xserver" | "xinitrc" | "greeter" | "nested" | "xrdp" | "vcxsrv" | "wsl-session";
-export type { Feature2 as Feature2Name };
-
-function sh(cmd: string, args: string[]): { code: number; out: string } {
-    const p = Bun.spawnSync([cmd, ...args], { stdout: "pipe", stderr: "pipe" });
-    return { code: p.exitCode ?? 1, out: (p.stdout ?? "").toString().trim() };
-}
-
-async function sudo(cmd: string, args: string[], dryRun: boolean): Promise<number> {
+export async function sudo(cmd: string, args: string[], dryRun: boolean): Promise<number> {
     if (dryRun) {
         console.log(`    [dry-run] sudo ${cmd} ${args.join(" ")}`);
         return 0;
@@ -40,245 +27,65 @@ async function sudo(cmd: string, args: string[], dryRun: boolean): Promise<numbe
     return await p.exited;
 }
 
-/** The X-server packages per deploy target. */
-function xserverPkgs(target: string): string[] {
-    switch (target) {
-        case "manjaro":
-        case "arch":
-            return ["xorg-server", "xorg-xinit", "xorg-xauth"];
-        case "ubuntu":
-        default:
-            return ["xserver-xorg-core", "xserver-xorg", "xinit", "xauth"];
-    }
+export interface Step {
+    name: string;
+    ok: boolean;
+    detail: string;
+    problem?: string;
 }
 
-function pkgInstalled(target: string, pkg: string): boolean {
-    const q =
-        target === "manjaro" || target === "arch"
-            ? sh("pacman", ["-Qi", pkg])
-            : sh("dpkg-query", ["-W", "-f=${Status}", pkg]);
-    if (target === "manjaro" || target === "arch") return q.code === 0;
+/** is the PLATFORM package `<pkg>` installed? (dpkg-query | pacman -Qi
+ *  — resolved by the target family the CALLER passes; no package names
+ *  live here) */
+export function platformPkgInstalled(pkgMgr: "apt" | "pacman", pkg: string): boolean {
+    if (pkgMgr === "pacman") return sh("pacman", ["-Qi", pkg]).code === 0;
+    const q = sh("dpkg-query", ["-W", "-f=${Status}", pkg]);
     return q.code === 0 && q.out.includes("install ok installed");
 }
 
-
-/** X server + xinit present (startx-capable). */
-export async function ensureXServer(
-    target: string, yes: boolean, dryRun: boolean,
-): Promise<Step> {
-    const missing = xserverPkgs(target).filter((p) => !pkgInstalled(target, p));
-    if (missing.length === 0) return { feature: "xserver", ok: true, detail: "already installed" };
-    console.log(`  xserver: missing ${missing.join(" ")}`);
-    if (!dryRun && !yes) {
-        const ok = await confirm("  install the X server packages? [Y/n] ");
-        if (!ok) return { feature: "xserver", ok: false, detail: "declined", problem: "declined" };
+/** the platform package-manager install/remove invocation for the
+ *  NAMES the caller passes */
+export async function platformPkg(
+    pkgMgr: "apt" | "pacman", op: "install" | "remove",
+    names: string[], yes: boolean, dryRun: boolean,
+): Promise<number> {
+    if (names.length === 0) return 0;
+    if (op === "install") {
+        const args = pkgMgr === "pacman"
+            ? ["-S", "--needed", ...names]
+            : ["install", "-y", ...names];
+        return sudo(pkgMgr, args, dryRun);
     }
-    const mgr = target === "manjaro" || target === "arch" ? "pacman" : "apt";
-    const args =
-        mgr === "pacman"
-            ? ["-S", "--needed", ...missing]
-            : ["install", "-y", ...missing];
-    const code = await sudo(mgr, args, dryRun);
-    if (code !== 0) return { feature: "xserver", ok: false, detail: `exit ${code}`, problem: "package manager failed" };
-    if (dryRun) return { feature: "xserver", ok: true, detail: `would install ${missing.join(" ")}` };
-    const still = missing.filter((p) => !pkgInstalled(target, p));
-    return still.length === 0
-        ? { feature: "xserver", ok: true, detail: `installed ${missing.join(" ")}` }
-        : { feature: "xserver", ok: false, detail: `still missing: ${still.join(" ")}`, problem: "post-verify failed" };
+    const args = pkgMgr === "pacman" ? ["-R", ...names] : ["remove", "-y", ...names];
+    return sudo(pkgMgr, args, dryRun);
 }
 
-/** ~/.xinitrc execs herbstluftwm (created when absent; other exec
- *  lines are commented out — xinit runs only the first exec). */
-export async function ensureXinitrc(
-    target: string, yes: boolean, dryRun: boolean,
-): Promise<Step> {
-    void target;
-    void yes;
-    const path = join(process.env.HOME!, ".xinitrc");
-    const EXEC = "exec herbstluftwm";
-    if (!existsSync(path)) {
-        if (dryRun) {
-            console.log(`  xinitrc: [dry-run] would create ${path} with '${EXEC}'`);
-            return { feature: "xinitrc", ok: true, detail: "would create" };
-        }
-        await Bun.write(path, `#!/bin/sh\n\n${EXEC}\n`);
-        return { feature: "xinitrc", ok: true, detail: `created ${path}` };
-    }
-    const text = await Bun.file(path).text();
-    if (text.split("\n").some((l) => l.trim() === EXEC)) {
-        return { feature: "xinitrc", ok: true, detail: "already execs herbstluftwm" };
-    }
-    // comment out other exec lines (only the first exec runs), add ours
-    const rewritten = text
-        .split("\n")
-        .map((l) => (/^\s*exec\s/.test(l) ? `# on-deploy: replaced by herbstluftwm session — ${l}` : l))
-        .concat(EXEC)
-        .join("\n");
-    if (dryRun) {
-        console.log(`  xinitrc: [dry-run] would rewrite ${path} to exec herbstluftwm`);
-        return { feature: "xinitrc", ok: true, detail: "would rewrite" };
-    }
-    await Bun.write(path, rewritten.endsWith("\n") ? rewritten : `${rewritten}\n`);
-    return { feature: "xinitrc", ok: true, detail: "rewritten to exec herbstluftwm" };
-}
-
-/** The greeter: greetd + tuigreet (a console UI greeter).
- *  arch/manjaro: pacman packages greetd + greetd-tuigreet;
- *  ubuntu: apt has greetd; tuigreet installs via cargo into
- *  /usr/local (system-wide — the greeter user must see it). */
-export async function ensureGreeter(
-    target: string, yes: boolean, dryRun: boolean,
-): Promise<Step> {
-    const XSESSION = "/usr/share/xsessions/herbstluftwm.desktop";
-    const arch = target === "manjaro" || target === "arch";
-    const steps: string[] = [];
-
-    // 1. the session entry tuigreet lists
-    if (!existsSync(XSESSION)) {
-        steps.push(`write ${XSESSION}`);
-        if (!dryRun) {
-            const content = [
-                "[Desktop Entry]",
-                "Name=herbstluftwm",
-                "Comment=Manual tiling window manager",
-                "Exec=herbstluftwm",
-                "Type=Application",
-                "Keywords=tiling;wm;",
-                "",
-            ].join("\n");
-            const p = Bun.spawn(["sudo", "tee", XSESSION],
-                { stdin: "pipe", stdout: "ignore", stderr: "inherit" });
-            p.stdin.write(content);
-            p.stdin.end();
-            await p.exited;
-        }
-    }
-
-    // 2. greetd + tuigreet packages
-    const pkgs = arch ? ["greetd", "greetd-tuigreet"] : ["greetd"];
-    const missing = pkgs.filter((p) => !pkgInstalled(target, p));
-    if (missing.length > 0) {
-        steps.push(`install ${missing.join(" ")}`);
-        if (!dryRun) {
-            const args = arch
-                ? ["-S", "--needed", ...missing]
-                : ["install", "-y", ...missing];
-            const code = await sudo(arch ? "pacman" : "apt", args, dryRun);
-            if (code !== 0) {
-                return { feature: "greeter", ok: false, detail: steps.join("; "), problem: "package manager failed" };
-            }
-        }
-    }
-
-    // 3. ubuntu: tuigreet via cargo, system-wide (/usr/local) — greetd
-    //    runs the greeter as its own user; $HOME/.cargo would be
-    //    invisible to it. cargo comes from rustc/cargo packages.
-    let tuigreet = "/usr/bin/tuigreet";
-    if (!arch) {
-        tuigreet = sh("sh", ["-c", "command -v tuigreet || echo /usr/local/bin/tuigreet"]).out;
-        if (!installed("tuigreet")) {
-            if (!pkgInstalled(target, "cargo") && !dryRun) {
-                const code = await sudo("apt", ["install", "-y", "cargo"], dryRun);
-                if (code !== 0) {
-                    return { feature: "greeter", ok: false, detail: steps.join("; "), problem: "cargo install failed" };
-                }
-            }
-            steps.push("cargo install tuigreet --root /usr/local");
-            if (!dryRun) {
-                const code = await sudo("sh", ["-c", "cargo install tuigreet --root /usr/local"], dryRun);
-                if (code !== 0) {
-                    return { feature: "greeter", ok: false, detail: steps.join("; "), problem: "tuigreet build failed" };
-                }
-            }
-        }
-    }
-
-    // 4. greetd config: tuigreet as the default session (existing
-    //    config backed up first)
-    const CFG = "/etc/greetd/config.toml";
-    const SESSION_CMD = `${tuigreet} --time --sessions-dir /usr/share/xsessions`;
-    if (!dryRun) {
-        const cur = existsSync(CFG) ? await Bun.file(CFG).text() : "";
-        if (!cur.includes("tuigreet")) {
-            if (cur) steps.push(`rewrite ${CFG} (backup at ${CFG}.bak)`);
-            else steps.push(`write ${CFG}`);
-            if (cur) await sudo("cp", [CFG, `${CFG}.bak`], dryRun);
-            const cfg = [
-                "[terminal]",
-                'vt = "7"',
-                "",
-                "[default_session]",
-                `command = "${SESSION_CMD}"`,
-                'user = "greeter"',
-                "",
-            ].join("\n");
-            const p = Bun.spawn(["sudo", "tee", CFG],
-                { stdin: "pipe", stdout: "ignore", stderr: "inherit" });
-            p.stdin.write(cfg);
-            p.stdin.end();
-            await p.exited;
-        }
-    } else {
-        steps.push(`write ${CFG} (default session: ${SESSION_CMD})`);
-    }
-
-    // 5. enable greetd (the display manager takes over getty)
-    const enabled = sh("systemctl", ["is-enabled", "greetd"]);
-    if (enabled.out !== "enabled") {
-        steps.push("systemctl enable greetd");
-        if (!dryRun) {
-            const code = await sudo("systemctl", ["enable", "greetd"], dryRun);
-            if (code !== 0) {
-                return { feature: "greeter", ok: false, detail: steps.join("; "), problem: "enable failed" };
-            }
-        }
-    }
-
-    const postOk = dryRun
-        || (existsSync(XSESSION) && missing.every((p) => pkgInstalled(target, p)));
-    return {
-        feature: "greeter",
-        ok: postOk,
-        detail: steps.length ? steps.join("; ") : "already provisioned",
-        problem: postOk ? undefined : "post-verify failed",
-    };
-}
-
-export const INSTALL_DIR_NOTE = INSTALL_BIN_DIR;
-
-
-/** The WSL bypass: NO display manager — hlwm runs as the systemd user
- *  unit herbst.service, which waits (bounded) for the Windows-side X
- *  server to be reachable. Verify the unit is enabled + X answers;
- *  nothing to install. */
-export async function verifyWslSession(
-    target: string, yes: boolean, dryRun: boolean,
-): Promise<Step> {
-    void target; void yes; void dryRun;
-    const unit = "herbst.service";
-    const enabled = sh("systemctl", ["--user", "is-enabled", unit]);
-    const active = sh("systemctl", ["--user", "is-active", unit]);
+/** verifyWslSession — the WSL session verify: the WM user unit
+ *  enabled/active + the external X server reachable. The unit name
+ *  comes from the PROFILE units (the caller passes it); nothing is
+ *  hardcoded. */
+export function verifyWslSession(unit: string): Step {
+    const name = unit.endsWith(".service") ? unit : `${unit}.service`;
+    const enabled = sh("systemctl", ["--user", "is-enabled", name]);
+    const active = sh("systemctl", ["--user", "is-active", name]);
     const xok = sh("sh", ["-c", "xset -display ${DISPLAY:-localhost:0.0} q"]);
-    const detail = `herbst.service ${enabled.out || "unknown"}/${active.out || "unknown"}, X ${xok.code === 0 ? "reachable" : "UNREACHABLE"}`;
+    const detail = `${name} ${enabled.out || "unknown"}/${active.out || "unknown"}, X ${xok.code === 0 ? "reachable" : "UNREACHABLE"}`;
     const ok = enabled.out === "enabled" && xok.code === 0;
-    return { feature: "wsl-session", ok, detail, problem: ok ? undefined : detail };
+    return { name: "wsl-session", ok, detail, problem: ok ? undefined : detail };
 }
 
 /** writeProfileEnv — persist the profile's env lines to
  *  ~/.config/doftiles/env (the units' optional EnvironmentFile).
  *  Merge semantics: existing KEY=VALUE lines are replaced in place,
  *  new keys appended — other profiles' keys survive a switch. */
-export async function writeProfileEnv(
-    profile: { env: string[] }, yes: boolean, dryRun: boolean,
-): Promise<Step> {
-    void yes;
+export async function writeProfileEnv(env: string[], dryRun: boolean): Promise<Step> {
     const path = join(process.env.HOME!, ".config/doftiles/env");
     if (dryRun) {
-        return { feature: "wsl-session", ok: true, detail: `would write ${path}: ${profile.env.join(" ")}` };
+        return { name: "env", ok: true, detail: `would write ${path}: ${env.join(" ")}` };
     }
     let current: string[] = [];
     try { current = (await Bun.file(path).text()).split("\n").filter(Boolean); } catch { /* absent */ }
-    for (const line of profile.env) {
+    for (const line of env) {
         const key = line.split("=")[0];
         current = current.filter((l) => !l.startsWith(`${key}=`));
         current.push(line);
@@ -286,93 +93,39 @@ export async function writeProfileEnv(
     const dir = path.replace(/\/[^/]+$/, "");
     Bun.spawnSync(["mkdir", "-p", dir]);
     await Bun.write(path, current.sort().join("\n") + "\n");
-    return { feature: "wsl-session", ok: true, detail: `${path}: ${current.join(" ")}` };
+    return { name: "env", ok: true, detail: `${path}: ${current.join(" ")}` };
 }
 
 /** enableUnits — enable --now the profile's systemd user units,
  *  additively (a second profile's activation leaves the first's units
  *  running — co-installability). Daemon-reload first so newly stowed
  *  units are visible. Idempotent: already-enabled units report ok. */
-export async function enableUnits(
-    profile: { units: string[] }, yes: boolean, dryRun: boolean,
-): Promise<Step> {
-    void yes;
+export function enableUnits(units: string[], dryRun: boolean): Step {
     if (dryRun) {
-        return { feature: "wsl-session", ok: true, detail: `would enable: ${profile.units.join(" ")}` };
+        return { name: "units", ok: true, detail: `would enable: ${units.join(" ")}` };
     }
     Bun.spawnSync(["systemctl", "--user", "daemon-reload"]);
     const enabled: string[] = [];
     const failed: string[] = [];
-    for (const unit of profile.units) {
+    for (const unit of units) {
         const name = unit.endsWith(".service") ? unit : `${unit}.service`;
         const r = Bun.spawnSync(["systemctl", "--user", "enable", "--now", name]);
         if ((r.exitCode ?? 1) === 0) enabled.push(name);
         else failed.push(name);
     }
     if (failed.length > 0) {
-        return { feature: "wsl-session", ok: false, detail: `enabled ${enabled.join(" ")}`, problem: `failed: ${failed.join(" ")}` };
+        return { name: "units", ok: false, detail: `enabled ${enabled.join(" ")}`, problem: `failed: ${failed.join(" ")}` };
     }
-    return { feature: "wsl-session", ok: true, detail: `enabled ${enabled.join(" ")}` };
-}
-
-
-/** novncListener — the nested stack's browser surface: parse the
- *  --listen address out of the LIVE novnc unit (the deployed unit
- *  file, via `systemctl --user cat`, so drop-ins and env overrides
- *  count) — the reported port is what is actually bound, not a
- *  hardcoded guess. Null when the unit cannot be found or has no
- *  --listen argument. */
-export async function novncListener(): Promise<string | null> {
-    const cat = Bun.spawnSync(
-        ["systemctl", "--user", "cat", "novnc.service"], { stdout: "pipe" },
-    );
-    let text = (cat.exitCode ?? 1) === 0 ? (cat.stdout ?? "").toString() : "";
-    if (!text) {
-        try {
-            text = await Bun.file(
-                join(process.env.HOME!, ".config/systemd/user/novnc.service"),
-            ).text();
-        } catch { return null; }
-    }
-    const m = text.match(/--listen\s+(\S+)/);
-    return m?.[1] ?? null;
-}
-
-
-/** ensureNested — install the nested-stack packages (Xvfb, x11vnc,
- *  noVNC) through the target's package manager. The units themselves
- *  are enabled by the profile's units = line. */
-export async function ensureNested(
-    target: string, yes: boolean, dryRun: boolean,
-): Promise<Step> {
-    const arch = target === "manjaro" || target === "arch";
-    const pkgs = arch
-        ? ["xorg-server-xvfb", "x11vnc", "novnc"]
-        : ["xvfb", "x11vnc", "novnc"];
-    const missing = pkgs.filter((p) => !pkgInstalled(target, p));
-    if (missing.length === 0) return { feature: "nested", ok: true, detail: "already installed" };
-    console.log(`  nested: missing ${missing.join(" ")}`);
-    if (!dryRun && !yes) {
-        const ok = await confirm("  install the nested stack packages? [Y/n] ");
-        if (!ok) return { feature: "nested", ok: false, detail: "declined", problem: "declined" };
-    }
-    const mgr = arch ? "pacman" : "apt";
-    const args = arch ? ["-S", "--needed", ...missing] : ["install", "-y", ...missing];
-    const code = await sudo(mgr, args, dryRun);
-    if (code !== 0) return { feature: "nested", ok: false, detail: `exit ${code}`, problem: "package manager failed" };
-    if (dryRun) return { feature: "nested", ok: true, detail: `would install ${missing.join(" ")}` };
-    const still = missing.filter((p) => !pkgInstalled(target, p));
-    return still.length === 0
-        ? { feature: "nested", ok: true, detail: `installed ${missing.join(" ")}` }
-        : { feature: "nested", ok: false, detail: `still missing: ${still.join(" ")}`, problem: "post-verify failed" };
+    return { name: "units", ok: true, detail: `enabled ${enabled.join(" ")}` };
 }
 
 /** ensureVcxsrv — the WSL stretch: the Windows-side X server. Checks
  *  the common VcXsrv install paths on the /mnt/c Windows partition;
  *  when absent, fetches the latest installer from the SourceForge
- *  release API (the VcXsrv project's own CDN) and runs it silently
- *  (InnoSetup /VERYSILENT) through WSL interop. Gated: dry-run
- *  reports only; the explicit run needs the caller's confirm/--yes. */
+ *  release API and runs it silently (InnoSetup /VERYSILENT) through
+ *  WSL interop. Gated: dry-run reports only; the explicit run needs
+ *  the caller's confirm/--yes. PLATFORM code (the external X server
+ *  of the wsl-systemd deployment model), not package management. */
 export async function ensureVcxsrv(
     yes: boolean, dryRun: boolean,
 ): Promise<Step> {
@@ -382,30 +135,29 @@ export async function ensureVcxsrv(
     ];
     for (const c of candidates) {
         if (existsSync(c)) {
-            return { feature: "vcxsrv", ok: true, detail: `installed at ${c}` };
+            return { name: "vcxsrv", ok: true, detail: `installed at ${c}` };
         }
     }
     // no usable Windows partition: not a WSL-interop host (automount
     // disabled leaves an empty /mnt/c mountpoint; devcontainer, nested
     // stack, bare linux have nothing there at all) — nothing to do
     let hasC = false;
-    try { hasC = (await import("node:fs")).readdirSync("/mnt/c").length > 0; } catch { hasC = false; }
+    try { hasC = readdirSync("/mnt/c").length > 0; } catch { hasC = false; }
     if (!hasC) {
-        return { feature: "vcxsrv", ok: true, detail: "empty /mnt/c — not a WSL-interop host, skipped" };
+        return { name: "vcxsrv", ok: true, detail: "empty /mnt/c — not a WSL-interop host, skipped" };
     }
     if (dryRun) {
-        return { feature: "vcxsrv", ok: false, detail: "NOT FOUND on the Windows partition", problem: "would download + install" };
+        return { name: "vcxsrv", ok: false, detail: "NOT FOUND on the Windows partition", problem: "would download + install" };
     }
     // query the SourceForge best-release API for the current installer
     const api = "https://sourceforge.net/projects/vcxsrv/best_release.json";
     const p = Bun.spawnSync(["curl", "-fsSL", api], { stdout: "pipe" });
     if ((p.exitCode ?? 1) !== 0) {
-        return { feature: "vcxsrv", ok: false, detail: "sourceforge API unreachable", problem: "curl failed" };
+        return { name: "vcxsrv", ok: false, detail: "sourceforge API unreachable", problem: "curl failed" };
     }
     let url = "";
     try {
         const j = JSON.parse((p.stdout ?? "").toString());
-        // the platform file: prefer the x86_64 windows installer
         const files = j?.release?.files ?? j?.platforms ?? {};
         const pick = (Object.values(files) as any[]).find(
             (f) => /windows.*x86_64|amd64/i.test(String(f?.name ?? "")) && /\.exe$/i.test(String(f?.url ?? "")),
@@ -413,19 +165,19 @@ export async function ensureVcxsrv(
         url = pick?.url ?? "";
         if (url && !url.startsWith("http")) url = `https://downloads.sourceforge.net/project/vcxsrv/${url}`;
     } catch {
-        return { feature: "vcxsrv", ok: false, detail: "sourceforge API response unparsable", problem: "no installer found" };
+        return { name: "vcxsrv", ok: false, detail: "sourceforge API response unparsable", problem: "no installer found" };
     }
     if (!url) {
-        return { feature: "vcxsrv", ok: false, detail: "no installer in the release feed", problem: "no installer found" };
+        return { name: "vcxsrv", ok: false, detail: "no installer in the release feed", problem: "no installer found" };
     }
     if (!yes) {
         const ok = await confirm(`  download + silently install VcXsrv from\n    ${url}\n  proceed? [y/N] `);
-        if (!ok) return { feature: "vcxsrv", ok: false, detail: "declined", problem: "declined" };
+        if (!ok) return { name: "vcxsrv", ok: false, detail: "declined", problem: "declined" };
     }
     const tmp = "/mnt/c/Users/Public/Downloads/VcXsrv-setup.exe";
     const dl = Bun.spawnSync(["curl", "-fsSL", "-o", tmp, url]);
     if ((dl.exitCode ?? 1) !== 0) {
-        return { feature: "vcxsrv", ok: false, detail: `download failed (${url})`, problem: "curl failed" };
+        return { name: "vcxsrv", ok: false, detail: `download failed (${url})`, problem: "curl failed" };
     }
     // InnoSetup silent install through WSL interop (the exe runs on the
     // Windows side; /CURRENTUSER keeps it out of the system store)
@@ -433,199 +185,10 @@ export async function ensureVcxsrv(
         stdout: "ignore", stderr: "ignore",
     });
     if ((inst.exitCode ?? 1) !== 0) {
-        return { feature: "vcxsrv", ok: false, detail: `installer exited ${inst.exitCode}`, problem: "installer failed" };
+        return { name: "vcxsrv", ok: false, detail: `installer exited ${inst.exitCode}`, problem: "installer failed" };
     }
     for (const c of candidates) {
-        if (existsSync(c)) return { feature: "vcxsrv", ok: true, detail: `installed to ${c}` };
+        if (existsSync(c)) return { name: "vcxsrv", ok: true, detail: `installed to ${c}` };
     }
-    return { feature: "vcxsrv", ok: false, detail: "installer ran but vcxsrv.exe not found in the standard paths", problem: "post-verify failed" };
-}
-
-
-/** xrdpListen — the RDP surface's bound port: parse `port=` out of
- *  /etc/xrdp/xrdp.ini (plain read first, sudo cat fallback). Null when
- *  the ini is absent or carries no plain-numeric port. */
-export async function xrdpListen(): Promise<number | null> {
-    let text = "";
-    try {
-        text = await Bun.file("/etc/xrdp/xrdp.ini").text();
-    } catch {
-        const p = Bun.spawnSync(
-            ["sudo", "cat", "/etc/xrdp/xrdp.ini"],
-            { stdout: "pipe", stdin: "ignore", stderr: "pipe" },
-        );
-        if ((p.exitCode ?? 1) !== 0) return null;
-        text = (p.stdout ?? "").toString();
-    }
-    const m = text.match(/^\s*port\s*=\s*(\d+)\s*$/m);
-    return m ? Number(m[1]) : null;
-}
-
-/** ensureXrdp — the nested profile's third surface: xrdp (a SYSTEM
- *  daemon) whose Xvnc module attaches to the ALREADY RUNNING x11vnc
- *  framebuffer (127.0.0.1:5900) — an RDP client lands in the same
- *  shared hlwm/Xvfb session the noVNC browser shows, no per-connection
- *  session spawn.
- *
- *  Steps: install the xrdp package, patch the distro's stock xrdp.ini
- *  IN PLACE (backup at xrdp.ini.on-deploy.bak first): pin [Xvnc]'s
- *  port to 5900 (stock value is ask5900), move the [Globals] RDP
- *  listen port to 3390 (3389 stays free for Windows' own RDP and the
- *  netsh portproxy that would otherwise collide with it), and give
- *  Xvnc the FIRST module slot so the login dialog defaults to the
- *  shared session; then enable --now the system unit (restart only
- *  when it was already active AND the config changed — a re-run must
- *  not drop live RDP sessions).
- *
- *  Requires the nested stack: with no x11vnc on :5900 the module has
- *  nothing to attach to and connections fail after the login dialog. */
-export async function ensureXrdp(
-    target: string, yes: boolean, dryRun: boolean,
-): Promise<Step> {
-    const INI = "/etc/xrdp/xrdp.ini";
-    const steps: string[] = [];
-
-    // 1. the package (xrdp only — the xorg backend is not needed for
-    //    Xvnc attach; installers pulling recommends may add it)
-    const missing = ["xrdp"].filter((p) => !pkgInstalled(target, p));
-    if (missing.length > 0) {
-        steps.push(`install ${missing.join(" ")}`);
-        console.log(`  xrdp: missing ${missing.join(" ")}`);
-        if (!dryRun && !yes) {
-            const ok = await confirm("  install the xrdp package? [Y/n] ");
-            if (!ok) return { feature: "xrdp", ok: false, detail: "declined", problem: "declined" };
-        }
-        const mgr = target === "manjaro" || target === "arch" ? "pacman" : "apt";
-        const args = mgr === "pacman"
-            ? ["-S", "--needed", ...missing]
-            : ["install", "-y", "--no-install-recommends", ...missing];
-        const code = await sudo(mgr, args, dryRun);
-        if (code !== 0) {
-            return { feature: "xrdp", ok: false, detail: steps.join("; "), problem: "package manager failed" };
-        }
-    }
-    if (dryRun && missing.length > 0) {
-        return { feature: "xrdp", ok: true, detail: `would install ${missing.join(" ")} + patch ${INI}` };
-    }
-
-    // 2. patch the ini: fold into [name] blocks, fix [Xvnc] port,
-    //    make Xvnc the first module block (module = carries lib=)
-    const wasActive = sh("systemctl", ["is-active", "xrdp"]).out === "active";
-    const text = await readRootFile(INI);
-    if (!text) {
-        return { feature: "xrdp", ok: false, detail: steps.join("; "), problem: `${INI} unreadable` };
-    }
-    type Block = { header: string | null; body: string[] };
-    const blocks: Block[] = [{ header: null, body: [] }];
-    for (const line of text.split("\n")) {
-        if (/^\s*\[/.test(line)) blocks.push({ header: line, body: [] });
-        else blocks[blocks.length - 1].body.push(line);
-    }
-    const secName = (b: Block): string => {
-        const m = (b.header ?? "").match(/^\s*\[([^\]]+)\]/);
-        return m ? m[1].trim().toLowerCase() : "";
-    };
-    const isModule = (b: Block): boolean => b.body.some((l) => /^\s*lib\s*=/.test(l));
-    const xi = blocks.findIndex((b) => secName(b) === "xvnc");
-    if (xi < 0) {
-        return { feature: "xrdp", ok: false, detail: steps.join("; "), problem: "no [Xvnc] section in xrdp.ini" };
-    }
-    const xu = blocks[xi];
-    let changed = false;
-    const portLine = xu.body.findIndex((l) => /^\s*port\s*=/.test(l));
-    if (portLine >= 0) {
-        if (!/^\s*port\s*=\s*5900\s*$/.test(xu.body[portLine])) {
-            xu.body[portLine] = xu.body[portLine].replace(/^\s*port\s*=.*$/, "port=5900");
-            changed = true;
-        }
-    } else {
-        xu.body.push("port=5900");
-        changed = true;
-    }
-    // [Globals] listen port → 3390 (the standard 3389 stays free for
-    // the Windows side's own RDP / netsh portproxy plans)
-    const gi = blocks.findIndex((b) => secName(b) === "globals");
-    if (gi >= 0) {
-        const gLine = blocks[gi].body.findIndex((l) => /^\s*port\s*=/.test(l));
-        if (gLine >= 0) {
-            if (!/^\s*port\s*=\s*3390\s*$/.test(blocks[gi].body[gLine])) {
-                blocks[gi].body[gLine] = blocks[gi].body[gLine].replace(/^\s*port\s*=.*$/, "port=3390");
-                changed = true;
-            }
-        } else {
-            blocks[gi].body.push("port=3390");
-            changed = true;
-        }
-    }
-    const firstModule = blocks.findIndex((b, i) => i > 0 && isModule(b) && secName(b) !== "xvnc");
-    if (firstModule >= 0 && xi > firstModule) {
-        blocks.splice(xi, 1);
-        blocks.splice(firstModule, 0, xu);
-        changed = true;
-    }
-    if (changed) {
-        steps.push(`patch ${INI} (backup at ${INI}.on-deploy.bak)`);
-        if (!dryRun) {
-            await sudo("cp", [INI, `${INI}.on-deploy.bak`], dryRun);
-            const out = blocks.flatMap((b) =>
-                b.header === null ? b.body : [b.header, ...b.body],
-            ).join("\n");
-            const p = Bun.spawn(["sudo", "tee", INI],
-                { stdin: "pipe", stdout: "ignore", stderr: "inherit" });
-            p.stdin.write(out.endsWith("\n") ? out : `${out}\n`);
-            p.stdin.end();
-            await p.exited;
-        }
-    }
-
-    // 3. the system unit: enable --now when off, restart only when it
-    //    was active already and the config just changed
-    const enabled = sh("systemctl", ["is-enabled", "xrdp"]);
-    if (enabled.out !== "enabled") {
-        steps.push("systemctl enable --now xrdp");
-        if (!dryRun) {
-            const code = await sudo("systemctl", ["enable", "--now", "xrdp"], dryRun);
-            if (code !== 0) {
-                return { feature: "xrdp", ok: false, detail: steps.join("; "), problem: "enable failed" };
-            }
-        }
-    } else if (!wasActive) {
-        steps.push("systemctl start xrdp");
-        if (!dryRun) {
-            const code = await sudo("systemctl", ["start", "xrdp"], dryRun);
-            if (code !== 0) {
-                return { feature: "xrdp", ok: false, detail: steps.join("; "), problem: "start failed" };
-            }
-        }
-    } else if (changed) {
-        steps.push("systemctl restart xrdp (config patched — connected sessions drop once)");
-        if (!dryRun) {
-            const code = await sudo("systemctl", ["restart", "xrdp"], dryRun);
-            if (code !== 0) {
-                return { feature: "xrdp", ok: false, detail: steps.join("; "), problem: "restart failed" };
-            }
-        }
-    }
-
-    const enabledNow = dryRun ? true : sh("systemctl", ["is-enabled", "xrdp"]).out === "enabled";
-    return {
-        feature: "xrdp",
-        ok: enabledNow,
-        detail: steps.length ? steps.join("; ") : "already provisioned",
-        problem: enabledNow ? undefined : "post-verify failed",
-    };
-}
-
-/** readRootFile — read a root-owned file (plain Bun.file first, since
- *  most /etc files are world-readable; sudo cat only as fallback for
- *  the 0600 cases). Null when both fail. */
-async function readRootFile(path: string): Promise<string | null> {
-    try {
-        return await Bun.file(path).text();
-    } catch { /* fall through to sudo */ }
-    const p = Bun.spawnSync(
-        ["sudo", "cat", path],
-        { stdout: "pipe", stdin: "ignore", stderr: "pipe" },
-    );
-    return (p.exitCode ?? 1) === 0 ? (p.stdout ?? "").toString() : null;
+    return { name: "vcxsrv", ok: false, detail: "installer ran but vcxsrv.exe not found in the standard paths", problem: "post-verify failed" };
 }

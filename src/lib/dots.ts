@@ -2,7 +2,8 @@
 // and the wm.requires manifest.
 
 import { spawnSync } from "node:child_process";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { existsSync } from "node:fs";
 
 export const DOTS_DIR = join(process.env.HOME!, "dots");
 export const INSTALL_BIN_DIR = join(process.env.HOME!, ".local/bin/install");
@@ -18,13 +19,28 @@ function sh(cmd: string, args: string[], cwd?: string): { code: number; out: str
     return { code: r.status ?? 1, out: (r.stdout ?? "").trim() };
 }
 
-/** a) the process must run inside ~/dots; b) origin must be doftiles. */
+/** a) the process must run inside ~/dots (walk-up: any SUBDIRECTORY of
+ *  the repo is accepted — package Makefiles `make -C` into
+ *  dots/<pkg>/.local/share/<pkg> and still call on-deploy); b) origin
+ *  must be doftiles. */
 export function checkDotsEnv(): EnvCheck {
-    const cwd = process.cwd();
+    let cwd = process.cwd();
     if (cwd !== DOTS_DIR) {
-        return { ok: false, problem: `must run inside ${DOTS_DIR} (cwd: ${cwd})` };
+        // walk up from the cwd looking for the repo root (wm.requires
+        // marker) — accepts subdirectories, rejects unrelated dirs
+        let dir = cwd;
+        let found = "";
+        for (let i = 0; i < 8 && dir !== "/" && dir !== ""; i += 1) {
+            if (existsSync(join(dir, "wm.requires"))) { found = dir; break; }
+            dir = dirname(dir);
+        }
+        if (!found || join(found) !== DOTS_DIR) {
+            return { ok: false, problem: `must run inside ${DOTS_DIR} or a subdirectory of it (cwd: ${cwd})` };
+        }
+        cwd = DOTS_DIR;
+        process.chdir(DOTS_DIR);
     }
-    const remote = sh("git", ["remote", "get-url", "origin"], cwd);
+    const remote = sh("git", ["remote", "get-url", "origin"], DOTS_DIR);
     if (remote.code !== 0 || !remote.out) {
         return { ok: false, problem: "not a git repository (or no origin)" };
     }

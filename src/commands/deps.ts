@@ -73,7 +73,9 @@ function confSet(method: string): void {
         `sed -i --follow-symlinks 's/^POLYFRAMES_METHOD=.*/POLYFRAMES_METHOD=${method}/' '${CONF}'; ` +
         `else printf 'POLYFRAMES_METHOD=${method}\\n' >> '${CONF}'; fi`,
     ]);
-    if (f.exitCode !== 0) console.error(`deps: WARNING — could not record POLYFRAMES_METHOD=${method} in ${CONF}`);
+    if (f.exitCode !== 0) {
+        console.error(`deps: WARNING: method=${method} not recorded in ${CONF}`);
+    }
 }
 
 /** sync the submodule checkout to origin/main (the source-build base) */
@@ -84,7 +86,7 @@ function polyframesSync(dry: boolean): number {
         return 1;
     }
     if (dry) {
-        console.log(`    [dry-run] git -C ${DOTS} submodule sync/update + ${POLYFRAMES_SUBMOD} -> origin/main`);
+        console.log(`    [dry-run] git -C ${DOTS_DIR} submodule sync/update + ${POLYFRAMES_SUBMOD} -> origin/main`);
         return 0;
     }
     if (run("git", ["-C", DOTS_DIR, "submodule", "sync", "--", "depends/.local/share/polyframes"]) !== 0) return 1;
@@ -126,7 +128,8 @@ function deploySource(dry: boolean): { ok: boolean; detail: string } {
     // "Bun's postinstall script was not run". Heal it when present.
     if (existsSync(join(POLYFRAMES_SUBMOD, "node_modules", "bun", "install.js"))) {
         if (run("sh", ["-c", `cd '${POLYFRAMES_SUBMOD}/node_modules/bun' && node install.js`]) !== 0) {
-            console.error("deps: WARNING — the local bun postinstall failed; the build may still fail");
+            console.error("deps: WARNING: local bun postinstall failed");
+            console.error("deps: the build may still fail");
         }
     }
     if (run("make", ["-C", POLYFRAMES_SUBMOD, "install"]) !== 0) {

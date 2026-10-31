@@ -7,13 +7,17 @@
 // help on empty argv).
 
 import { createCLI } from "@bunli/core";
-import deployCommand, { walk } from "./commands/deploy";
+import installCommand, { walk } from "./commands/install";
 import checkCommand from "./commands/check";
-import snapshotCommand from "./commands/snapshot";
+import searchCommand from "./commands/search";
+import pkgCommand from "./commands/pkg";
 import configureCommand from "./commands/configure";
-import provisionCommand from "./commands/provision";
+import applyCommand from "./commands/apply";
 import toolchainCommand from "./commands/toolchain";
 import depsCommand from "./commands/deps";
+import archiveCommand from "./commands/archive";
+import unarchiveCommand from "./commands/unarchive";
+import packagesCommand from "./commands/packages";
 
 const argv = process.argv.slice(2);
 if (argv.length === 0) {
@@ -38,13 +42,17 @@ const cli = await createCLI({
         "Rigorous dotfiles requirement deployer: verify wm.requires binaries, install the missing ones via the platform deploy script.",
 });
 
-cli.command(deployCommand);
+cli.command(installCommand);
 cli.command(checkCommand);
-cli.command(snapshotCommand);
+cli.command(searchCommand);
+cli.command(pkgCommand);
 cli.command(configureCommand);
-cli.command(provisionCommand);
+cli.command(applyCommand);
 cli.command(toolchainCommand);
 cli.command(depsCommand);
+cli.command(archiveCommand);
+cli.command(unarchiveCommand);
+cli.command(packagesCommand);
 
 if (compiled) process.chdir(origCwd);
 

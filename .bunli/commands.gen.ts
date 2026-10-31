@@ -4,29 +4,54 @@
 import type { Command, CLI, GeneratedOptionMeta, RegisteredCommands, CommandOptions, GeneratedCommandMeta } from '@bunli/core'
 import { createGeneratedHelpers, registerGeneratedStore } from '@bunli/core'
 
+import Apply from '../src/commands/apply.js'
+import Archive from '../src/commands/archive.js'
 import Check from '../src/commands/check.js'
 import Configure from '../src/commands/configure.js'
-import Deploy from '../src/commands/deploy.js'
 import Deps from '../src/commands/deps.js'
-import Provision from '../src/commands/provision.js'
-import Snapshot from '../src/commands/snapshot.js'
+import Install from '../src/commands/install.js'
+import Packages from '../src/commands/packages.js'
+import Pkg from '../src/commands/pkg.js'
+import Search from '../src/commands/search.js'
 import Toolchain from '../src/commands/toolchain.js'
+import Unarchive from '../src/commands/unarchive.js'
 
 // Narrow list of command names to avoid typeof-cycles in types
-const names = ['check', 'configure', 'deploy', 'deps', 'provision', 'snapshot', 'toolchain'] as const
+const names = ['apply', 'archive', 'check', 'configure', 'deps', 'install', 'packages', 'pkg', 'search', 'toolchain', 'unarchive'] as const
 type GeneratedNames = typeof names[number]
 
 const modules: Record<GeneratedNames, Command<any>> = {
+  'apply': Apply,
+  'archive': Archive,
   'check': Check,
   'configure': Configure,
-  'deploy': Deploy,
   'deps': Deps,
-  'provision': Provision,
-  'snapshot': Snapshot,
-  'toolchain': Toolchain
+  'install': Install,
+  'packages': Packages,
+  'pkg': Pkg,
+  'search': Search,
+  'toolchain': Toolchain,
+  'unarchive': Unarchive
 } as const
 
 const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
+  'apply': {
+      name: 'apply',
+      description: 'Apply the configured deployment: resolve the platform (debian-wsl | debian | archlinux), run its generic step list',
+      options: {
+        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print what would run', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'profile': { type: 'z.string.optional', required: false, hasDefault: false, description: 'profile file name inside ~/dots (default deploy.profile)', fileType: 'file', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+      },
+      path: './src/commands/apply'
+    },
+  'archive': {
+      name: 'archive',
+      description: 'Back up the current (not dots-owned) $HOME files of a stow package into ~/dots/defaults/',
+      options: {
+        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'list what would be collected, copy nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+      },
+      path: './src/commands/archive'
+    },
   'check': {
       name: 'check',
       description: 'Verify environment + requirements; install nothing',
@@ -37,23 +62,19 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
     },
   'configure': {
       name: 'configure',
-      description: 'Edit the deploy target + required-package list of wm.requires (TUI or flags)',
+      description: 'Configure the deployment: target + binaries (wm.requires), deployment model + services (deploy.profile), git credentials (dots/shell/.my-credentials)',
       options: {
         'target': { type: 'z.string.optional', required: false, hasDefault: false, description: 'set the deploy target directly', fileType: 'directory', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
         'add': { type: 'z.string.optional', required: false, hasDefault: false, description: 'comma/space-separated binaries to add', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
         'remove': { type: 'z.string.optional', required: false, hasDefault: false, description: 'comma/space-separated binaries to remove', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
-        'show': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print the current manifest', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+        'session': { type: 'z.string.optional', required: false, hasDefault: false, schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'features': { type: 'z.string.optional', required: false, hasDefault: false, description: 'space-separated features (xserver xinitrc greeter nested xrdp)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'units': { type: 'z.string.optional', required: false, hasDefault: false, description: 'space-separated systemd user units to enable', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'name': { type: 'z.string.optional', required: false, hasDefault: false, description: 'git user name (three words; stored in dots/shell/.my-credentials)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'email': { type: 'z.string.optional', required: false, hasDefault: false, description: 'git user email (stored in dots/shell/.my-credentials)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'show': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print the current configuration', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
       },
       path: './src/commands/configure'
-    },
-  'deploy': {
-      name: 'deploy',
-      description: 'Install every missing required binary (interactive unless --yes)',
-      options: {
-        'yes': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'install without confirmation (non-interactive)', short: 'y', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
-        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'resolve + report, run nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
-      },
-      path: './src/commands/deploy'
     },
   'deps': {
       name: 'deps',
@@ -66,23 +87,38 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
       },
       path: './src/commands/deps'
     },
-  'provision': {
-      name: 'provision',
-      description: 'Platform provisioning per deploy.profile: xserver packages, ~/.xinitrc session, greeter',
+  'install': {
+      name: 'install',
+      description: 'Install missing required binaries from the target repositories (search + install + re-verify)',
       options: {
-        'yes': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'assume yes for every step (non-interactive)', short: 'y', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
-        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print what would be done, change nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
-        'profile': { type: 'z.string.optional', required: false, hasDefault: false, description: 'profile file name inside ~/dots (default deploy.profile)', fileType: 'file', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+        'yes': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'install without confirmation (non-interactive)', short: 'y', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'resolve + report, run nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'only': { type: 'z.string.optional', required: false, hasDefault: false, description: 'comma/space-separated subset of binaries to install', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
       },
-      path: './src/commands/provision'
+      path: './src/commands/install'
     },
-  'snapshot': {
-      name: 'snapshot',
-      description: 'Collect pre-existing user config into ~/dots/defaults/ (restorable; run before the first deploy)',
+  'packages': {
+      name: 'packages',
+      description: 'Group operations on the stow packages\' dependency Makefiles (install/start/stop/uninstall/status/disable/enable)',
+      path: './src/commands/packages'
+    },
+  'pkg': {
+      name: 'pkg',
+      description: 'Generic package operations on the given names (installed|search|install|remove) via the platform package manager',
       options: {
-        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'list what would be collected, copy nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+        'yes': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'no confirmations (non-interactive)', short: 'y', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print what would run', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
       },
-      path: './src/commands/snapshot'
+      path: './src/commands/pkg'
+    },
+  'search': {
+      name: 'search',
+      description: 'Resolve the providing package of required binaries in the target repositories (read-only)',
+      options: {
+        'only': { type: 'z.string.optional', required: false, hasDefault: false, description: 'comma/space-separated subset of binaries to search', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'all': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'search EVERY binary, including installed ones', short: 'a', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+      },
+      path: './src/commands/search'
     },
   'toolchain': {
       name: 'toolchain',
@@ -93,6 +129,14 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
         'force': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'rebuild the ensured binaries even when installed', short: 'f', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
       },
       path: './src/commands/toolchain'
+    },
+  'unarchive': {
+      name: 'unarchive',
+      description: 'Restore a stow package\'s defaults/ backups into $HOME (skips dots-owned paths)',
+      options: {
+        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'list what would be restored, copy nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+      },
+      path: './src/commands/unarchive'
     }
 } as const
 
