@@ -9,15 +9,19 @@ import Archive from '../src/commands/archive.js'
 import Check from '../src/commands/check.js'
 import Configure from '../src/commands/configure.js'
 import Deps from '../src/commands/deps.js'
+import Disable from '../src/commands/disable.js'
+import Enable from '../src/commands/enable.js'
 import Install from '../src/commands/install.js'
 import Packages from '../src/commands/packages.js'
 import Pkg from '../src/commands/pkg.js'
 import Search from '../src/commands/search.js'
+import Stow from '../src/commands/stow.js'
 import Toolchain from '../src/commands/toolchain.js'
 import Unarchive from '../src/commands/unarchive.js'
+import Unstow from '../src/commands/unstow.js'
 
 // Narrow list of command names to avoid typeof-cycles in types
-const names = ['apply', 'archive', 'check', 'configure', 'deps', 'install', 'packages', 'pkg', 'search', 'toolchain', 'unarchive'] as const
+const names = ['apply', 'archive', 'check', 'configure', 'deps', 'disable', 'enable', 'install', 'packages', 'pkg', 'search', 'stow', 'toolchain', 'unarchive', 'unstow'] as const
 type GeneratedNames = typeof names[number]
 
 const modules: Record<GeneratedNames, Command<any>> = {
@@ -26,12 +30,16 @@ const modules: Record<GeneratedNames, Command<any>> = {
   'check': Check,
   'configure': Configure,
   'deps': Deps,
+  'disable': Disable,
+  'enable': Enable,
   'install': Install,
   'packages': Packages,
   'pkg': Pkg,
   'search': Search,
+  'stow': Stow,
   'toolchain': Toolchain,
-  'unarchive': Unarchive
+  'unarchive': Unarchive,
+  'unstow': Unstow
 } as const
 
 const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
@@ -87,6 +95,22 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
       },
       path: './src/commands/deps'
     },
+  'disable': {
+      name: 'disable',
+      description: 'Disable packages (TUI or explicit list) — disable',
+      options: {
+        'only': { type: 'z.string.optional', required: false, hasDefault: false, description: 'comma/space-separated packages (skips the TUI)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+      },
+      path: './src/commands/disable'
+    },
+  'enable': {
+      name: 'enable',
+      description: 'Enable packages (TUI or explicit list) — enable',
+      options: {
+        'only': { type: 'z.string.optional', required: false, hasDefault: false, description: 'comma/space-separated packages (skips the TUI)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+      },
+      path: './src/commands/enable'
+    },
   'install': {
       name: 'install',
       description: 'Install missing required binaries from the target repositories (search + install + re-verify)',
@@ -99,7 +123,7 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
     },
   'packages': {
       name: 'packages',
-      description: 'Group operations on the stow packages\' dependency Makefiles (install/start/stop/uninstall/status/disable/enable)',
+      description: 'Group operations on the stow packages\' dependency Makefiles (install/start/stop/uninstall/status/disable/enable); bare = TUI',
       path: './src/commands/packages'
     },
   'pkg': {
@@ -120,6 +144,14 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
       },
       path: './src/commands/search'
     },
+  'stow': {
+      name: 'stow',
+      description: 'Stow packages (TUI or explicit list) — stow',
+      options: {
+        'only': { type: 'z.string.optional', required: false, hasDefault: false, description: 'comma/space-separated packages (skips the TUI)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+      },
+      path: './src/commands/stow'
+    },
   'toolchain': {
       name: 'toolchain',
       description: 'make install assurance steps: bun toolchain, bun trust, herbctl binary (bun/ensure formerly separate Makefile recipes)',
@@ -137,6 +169,14 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
         'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'list what would be restored, copy nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
       },
       path: './src/commands/unarchive'
+    },
+  'unstow': {
+      name: 'unstow',
+      description: 'Unstow packages (TUI or explicit list) — unstow',
+      options: {
+        'only': { type: 'z.string.optional', required: false, hasDefault: false, description: 'comma/space-separated packages (skips the TUI)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+      },
+      path: './src/commands/unstow'
     }
 } as const
 

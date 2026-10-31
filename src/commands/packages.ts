@@ -17,6 +17,9 @@ import { defineCommand } from "@bunli/core";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { checkDotsEnv, DOTS_DIR } from "../lib/dots";
+import {
+    printResults, runRule, whiptailChecklist, whiptailMenu, type PkgResult,
+} from "../lib/pkgops";
 
 
 export const STANDARD_RULES = [
@@ -39,7 +42,7 @@ export function packagesWithMakefiles(dots: string): string[] {
 export default defineCommand({
     name: "packages",
     description:
-        "Group operations on the stow packages' dependency Makefiles (install/start/stop/uninstall/status/disable/enable)",
+        "Group operations on the stow packages' dependency Makefiles (install/start/stop/uninstall/status/disable/enable); bare = TUI",
     handler: async ({ positional }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
@@ -48,9 +51,40 @@ export default defineCommand({
         }
         const [rule, ...rest] = positional;
         const available = packagesWithMakefiles(DOTS_DIR);
+
+        // TUI mode: bare + interactive -> rule menu + package checklist;
+        // the Makefiles' output is CAPTURED per package and printed
+        // sequentially after the TUI closes
+        if (!rule && process.stdin.isTTY) {
+            const pick = whiptailMenu(
+                "on-deploy packages", "rule",
+                [...STANDARD_RULES, "list"],
+            );
+            if (pick === null) {
+                console.log("packages: cancelled");
+                return;
+            }
+            if (pick === "list") {
+                console.log(`packages: ${available.join(" ")}`);
+                return;
+            }
+            const sel = whiptailChecklist(
+                "on-deploy packages", `packages for '${pick}'`, available, available,
+            );
+            if (sel === null) {
+                console.log("packages: cancelled");
+                return;
+            }
+            const results: PkgResult[] = [];
+            for (const pkg of sel) results.push(runRule(pkg, pick));
+            printResults(results);
+            if (results.some((r) => !r.ok)) process.exit(1);
+            return;
+        }
+
         if (!rule || rule === "list") {
-            console.log(`packages: dependency Makefiles in ${available.join(" ") || "(none)"}`);
-            console.log(`packages: standard rules: ${STANDARD_RULES.join(" ")}`);
+            console.log(`packages: ${available.join(" ") || "(none)"}`);
+            console.log(`packages: rules: ${STANDARD_RULES.join(" ")}`);
             return;
         }
         const wanted = rest.length ? rest : available;
@@ -59,23 +93,12 @@ export default defineCommand({
             console.log(`packages: ${p}: no Makefile`);
         }
         const targets = wanted.filter((p) => available.includes(p));
-        let failed = 0;
+        const results: PkgResult[] = [];
         for (const pkg of targets) {
-            const dir = join(DOTS_DIR, pkg, ".local", "share", pkg);
-            console.log(`packages: ${pkg} — make ${rule}`);
-            const p = Bun.spawn(["make", "-C", dir, rule], {
-                stdout: "inherit", stderr: "inherit", stdin: "inherit", cwd: DOTS_DIR,
-            });
-            const code = await p.exited;
-            if (code !== 0) {
-                console.error(`packages: ${pkg} make ${rule} FAILED (exit ${code})`);
-                failed += 1;
-            }
+            results.push(runRule(pkg, rule));
         }
-        if (failed > 0) {
-            console.error(`packages: ${failed} package(s) failed '${rule}'`);
-            process.exit(1);
-        }
+        printResults(results);
+        if (results.some((r) => !r.ok)) process.exit(1);
         console.log(`packages: ${rule} done on ${targets.length} package(s)`);
     },
 });

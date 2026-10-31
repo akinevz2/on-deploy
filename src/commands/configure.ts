@@ -20,8 +20,14 @@ import {
     readFileSync, writeFileSync, existsSync, readdirSync,
     chmodSync, symlinkSync, realpathSync,
 } from "node:fs";
-import { checkDotsEnv, DOTS_DIR } from "../lib/dots";
+import { checkDotsEnv, DOTS_DIR, readRequires } from "../lib/dots";
 import { readLine } from "../lib/lines";
+import { runApply } from "../lib/applyCore";
+import { walk } from "./install";
+import {
+    packagesWithMakefiles, printResults, runRule, stowPackages, stowPkg,
+    whiptailYesNo, type PkgResult,
+} from "../lib/pkgops";
 
 const KNOWN_TARGETS = ["ubuntu", "debian", "manjaro", "arch", "fedora"];
 // the candidate catalog for the checklist (the current list is always
@@ -390,7 +396,41 @@ export default defineCommand({
             // the menu works on a tty (interactive) and over a pipe
             // (scripted feeds); EOF terminates it with a save
             await tuiEdit(m);
-            return; // tuiEdit persists everything itself
+            // the WIZARD: the saved configuration now drives the full
+            // deployment — binaries from the repos, each package's
+            // install rule, stow, then the platform apply. Output is
+            // printed sequentially per phase (the TUI has closed).
+            if (process.stdin.isTTY) {
+                const go = whiptailYesNo(
+                    "configure", "run the full deployment now?\n(install + package rules + stow + apply)",
+                );
+                if (go) {
+                    console.log("wizard: binaries");
+                    const failed = await walk(false, false);
+                    if (failed > 0) {
+                        console.error(`wizard: ${failed} binary/b missing`);
+                        process.exit(1);
+                    }
+                    console.log("wizard: package install rules");
+                    const results: PkgResult[] = [];
+                    for (const pkg of packagesWithMakefiles()) {
+                        results.push(runRule(pkg, "install"));
+                    }
+                    printResults(results);
+                    if (results.some((r) => !r.ok)) process.exit(1);
+                    console.log("wizard: stow");
+                    const stowed = stowPackages().map((p) => stowPkg(p));
+                    printResults(stowed);
+                    console.log("wizard: apply");
+                    const applyFailed = await runApply({});
+                    if (applyFailed > 0) {
+                        console.error(`wizard: apply FAILED (${applyFailed})`);
+                        process.exit(1);
+                    }
+                    console.log("wizard: complete");
+                }
+            }
+            return;
         }
 
         // warn when the target has no deploy script
