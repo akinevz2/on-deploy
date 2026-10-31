@@ -7,18 +7,20 @@ import { createGeneratedHelpers, registerGeneratedStore } from '@bunli/core'
 import Check from '../src/commands/check.js'
 import Configure from '../src/commands/configure.js'
 import Deploy from '../src/commands/deploy.js'
+import Deps from '../src/commands/deps.js'
 import Provision from '../src/commands/provision.js'
 import Snapshot from '../src/commands/snapshot.js'
 import Toolchain from '../src/commands/toolchain.js'
 
 // Narrow list of command names to avoid typeof-cycles in types
-const names = ['check', 'configure', 'deploy', 'provision', 'snapshot', 'toolchain'] as const
+const names = ['check', 'configure', 'deploy', 'deps', 'provision', 'snapshot', 'toolchain'] as const
 type GeneratedNames = typeof names[number]
 
 const modules: Record<GeneratedNames, Command<any>> = {
   'check': Check,
   'configure': Configure,
   'deploy': Deploy,
+  'deps': Deps,
   'provision': Provision,
   'snapshot': Snapshot,
   'toolchain': Toolchain
@@ -52,6 +54,17 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
         'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'resolve + report, run nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
       },
       path: './src/commands/deploy'
+    },
+  'deps': {
+      name: 'deps',
+      description: 'Deploy the doftiles dependencies (polyframes) — ensure | --force | --method source|npm|release | --uninstall',
+      options: {
+        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print what would be done, change nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'force': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'redeploy even when the artifact exists (the refresh flow)', short: 'f', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'method': { type: 'z.enum.optional', required: false, hasDefault: false, description: 'deploy with this method and record it (overrides the conf)', enumValues: ["source","npm","release"], schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'uninstall': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'remove the artifact per the recorded method, reset the conf', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+      },
+      path: './src/commands/deps'
     },
   'provision': {
       name: 'provision',

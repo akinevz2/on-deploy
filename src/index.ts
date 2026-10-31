@@ -13,6 +13,7 @@ import snapshotCommand from "./commands/snapshot";
 import configureCommand from "./commands/configure";
 import provisionCommand from "./commands/provision";
 import toolchainCommand from "./commands/toolchain";
+import depsCommand from "./commands/deps";
 
 const argv = process.argv.slice(2);
 if (argv.length === 0) {
@@ -43,6 +44,7 @@ cli.command(snapshotCommand);
 cli.command(configureCommand);
 cli.command(provisionCommand);
 cli.command(toolchainCommand);
+cli.command(depsCommand);
 
 if (compiled) process.chdir(origCwd);
 

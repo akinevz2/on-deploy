@@ -8,6 +8,8 @@ on-deploy check        what's missing?            (report only)
 on-deploy deploy       install the missing        (interactive | --yes)
 on-deploy provision    platform services setup    (per deploy.profile)
 on-deploy toolchain    make install assurances    (bun, trust, herbctl)
+on-deploy deps         dependency deployment      (polyframes;
+                       --method source|npm|release)
 ```
 
 ## The contract

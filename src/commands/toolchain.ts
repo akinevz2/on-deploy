@@ -36,10 +36,10 @@ function sh(cmd: string, args: string[]): { code: number; out: string } {
 }
 
 function run(cmd: string, args: string[]): number {
-    const p = Bun.spawn([cmd, ...args], {
+    const p = Bun.spawnSync([cmd, ...args], {
         stdout: "inherit", stderr: "inherit", stdin: "inherit",
     });
-    return p.exited ?? 1;
+    return p.exitCode ?? 1;
 }
 
 /** Build + install a bunli binary from a submodule checkout. */
