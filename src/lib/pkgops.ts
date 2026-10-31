@@ -112,6 +112,15 @@ export function printResults(results: PkgResult[]): void {
     }
 }
 
+/** whiptail (newt) can exit with the terminal still in raw/no-echo
+ *  mode — any later prompt then hangs (Enter sends \r, no \n ever
+ *  arrives). Restore sane modes after EVERY whiptail call. */
+function sttySane(): void {
+    Bun.spawnSync(["stty", "sane"], {
+        stdin: "inherit", stdout: "ignore", stderr: "ignore",
+    });
+}
+
 /** whiptail checklist -> selected tags (null = cancelled) */
 export function whiptailChecklist(
     title: string, prompt: string, items: string[], preselect: string[] = [],
@@ -122,6 +131,7 @@ export function whiptailChecklist(
         "--checklist", prompt, "20", "60", "12",
         ...items.flatMap((i) => [i, "", preselect.includes(i) ? "on" : "off"]),
     ], { stdout: "pipe", stderr: "inherit", stdin: "inherit" });
+    sttySane();
     if ((p.exitCode ?? 1) !== 0) return null;
     return `${p.stdout ?? ""}`.split("\n").map((s) => s.trim()).filter(Boolean);
 }
@@ -132,6 +142,7 @@ export function whiptailYesNo(title: string, prompt: string): boolean {
         ["whiptail", "--title", title, "--yesno", prompt, "12", "60"],
         { stdout: "ignore", stderr: "inherit", stdin: "inherit" },
     );
+    sttySane();
     return (p.exitCode ?? 1) === 0;
 }
 /** whiptail menu -> single tag (null = cancelled) */
@@ -141,6 +152,7 @@ export function whiptailMenu(title: string, prompt: string, items: string[]): st
         "whiptail", "--title", title, "--menu", prompt, "20", "60", "12",
         ...items.flatMap((i) => [i, ""]),
     ], { stdout: "pipe", stderr: "inherit", stdin: "inherit" });
+    sttySane();
     if ((p.exitCode ?? 1) !== 0) return null;
     return `${p.stdout ?? ""}`.trim();
 }

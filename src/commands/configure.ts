@@ -179,7 +179,7 @@ function validCredentials(name: string, email: string): string {
 
 // One-line stdin reader — NOT node:readline (bun's readline wedges;
 // see deploy.ts). Resolves per newline, so scripted feeds work too.
-async function tuiEdit(m: Manifest): Promise<void> {
+async function tuiEdit(m: Manifest): Promise<boolean> {
     const list = (): string => m.binaries.join(" ");
     const model = readModel();
     const cred = readCredentials() as { name: string; email: string; dirty?: boolean };
@@ -217,7 +217,7 @@ async function tuiEdit(m: Manifest): Promise<void> {
         process.stdout.write("choice: ");
         const a = (await readLine()).trim().toLowerCase();
         if (a === "s" || a === "") break;
-        if (a === "q") return;
+        if (a === "q") return false;
 
         if (a === "1") {
             console.log(`    targets: ${KNOWN_TARGETS.join(", ")} — or a custom name`);
@@ -294,6 +294,7 @@ async function tuiEdit(m: Manifest): Promise<void> {
             console.log(`configure: ${note}`);
         }
     }
+    return true;
 }
 
 export default defineCommand({
@@ -395,7 +396,11 @@ export default defineCommand({
         if (!flags.target && !flags.add && !flags.remove && !modelDirty && !credNotes) {
             // the menu works on a tty (interactive) and over a pipe
             // (scripted feeds); EOF terminates it with a save
-            await tuiEdit(m);
+            const saved = await tuiEdit(m);
+            if (!saved) {
+                console.log("configure: quit — nothing deployed");
+                return;
+            }
             // the WIZARD: the saved configuration now drives the full
             // deployment — binaries from the repos, each package's
             // install rule, stow, then the deploy target apply. Output is
