@@ -45,7 +45,7 @@ const modules: Record<GeneratedNames, Command<any>> = {
 const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
   'apply': {
       name: 'apply',
-      description: 'Apply the configured deployment: resolve the platform (debian-wsl | debian | archlinux), run its generic step list',
+      description: 'Apply the configured deployment: resolve the deploy target (debian-wsl | debian | archlinux), run its generic step list',
       options: {
         'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print what would run', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
         'profile': { type: 'z.string.optional', required: false, hasDefault: false, description: 'profile file name inside ~/dots (default deploy.profile)', fileType: 'file', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
@@ -128,7 +128,7 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
     },
   'pkg': {
       name: 'pkg',
-      description: 'Generic package operations on the given names (installed|search|install|remove) via the platform package manager',
+      description: 'Generic package operations on the given names (installed|search|install|remove) via the deploy target package manager',
       options: {
         'yes': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'no confirmations (non-interactive)', short: 'y', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
         'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print what would run', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
