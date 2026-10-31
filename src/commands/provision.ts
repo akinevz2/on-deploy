@@ -5,7 +5,7 @@ import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
 import { checkDotsEnv, readRequires } from "../lib/dots";
 import { readProfile, type Profile } from "../lib/profile";
-import { ensureXServer, ensureXinitrc, ensureGreeter, verifyWslSession, writeProfileEnv, enableUnits, ensureNested, ensureVcxsrv, novncListener } from "../lib/provisioners";
+import { ensureXServer, ensureXinitrc, ensureGreeter, verifyWslSession, writeProfileEnv, enableUnits, ensureNested, ensureVcxsrv, ensureXrdp, novncListener, xrdpListen } from "../lib/provisioners";
 
 export default defineCommand({
     name: "provision",
@@ -72,22 +72,41 @@ export default defineCommand({
                         ? await ensureXinitrc(target, !!flags.yes, !!flags["dry-run"])
                         : f === "nested"
                             ? await ensureNested(target, !!flags.yes, !!flags["dry-run"])
-                            : await ensureGreeter(target, !!flags.yes, !!flags["dry-run"]);
+                            : f === "xrdp"
+                                ? await ensureXrdp(target, !!flags.yes, !!flags["dry-run"])
+                                : await ensureGreeter(target, !!flags.yes, !!flags["dry-run"]);
             const mark = step.ok ? "ok" : "FAILED";
             console.log(`  ${f.padEnd(10)} ${mark} — ${step.detail}${step.problem ? ` (${step.problem})` : ""}`);
             if (!step.ok) failed += 1;
         }
+        // unit names reshaped once, used by the nested/xrdp reports too
+        const enabled = profile.units.map((u) => (u.endsWith(".service") ? u : `${u}.service`));
         if (profile.units.length > 0) {
             await runStep("units", () => enableUnits(profile, !!flags.yes, !!flags["dry-run"]));
             // the nested stack: name its browser surface AFTER the
             // services are printed — resolved from the live novnc unit
-            const enabled = profile.units.map((u) => (u.endsWith(".service") ? u : `${u}.service`));
             if (enabled.includes("novnc.service")) {
                 const listen = await novncListener();
                 console.log(
                     listen
                         ? `  nested     noVNC (${enabled.includes("x11vnc.service") ? "VNC backend on localhost:5900 via x11vnc, " : ""}browser surface) listens on ${listen} — open http://${listen}/vnc.html`
                         : "  nested     novnc.service enabled — its ExecStart carries no --listen (port unknown)",
+                );
+            }
+        }
+        // the xrdp layer: name the RDP surface — port from the live
+        // (possibly feature-patched) /etc/xrdp/xrdp.ini
+        if (profile.features.includes("xrdp") && !flags["dry-run"]) {
+            const port = await xrdpListen();
+            if (enabled.includes("x11vnc.service") || profile.features.includes("nested")) {
+                console.log(
+                    `  xrdp       RDP surface on :${port ?? 3389} — connect an RDP client to this host:${port ?? 3389};` +
+                    ` the default session is Xvnc, attaching to the shared framebuffer (localhost:5900, same session as noVNC)`,
+                );
+            } else {
+                console.log(
+                    `  xrdp       RDP surface on :${port ?? 3389} enabled, BUT no nested stack in the profile —` +
+                    ` the Xvnc module has no x11vnc (:5900) to attach to until x11vnc is listening`,
                 );
             }
         }

@@ -7,6 +7,7 @@ Three verbs, run in order on a fresh machine — or one call, `make bootstrap`.
 on-deploy check        what's missing?            (report only)
 on-deploy deploy       install the missing        (interactive | --yes)
 on-deploy provision    platform services setup    (per deploy.profile)
+on-deploy toolchain    make install assurances    (bun, trust, herbctl)
 ```
 
 ## The contract

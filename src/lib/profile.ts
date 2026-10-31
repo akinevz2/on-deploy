@@ -13,7 +13,12 @@
 //   - xinit        startx runs ~/.xinitrc (exec herbstluftwm); no DM
 //   - nested       hlwm inside the Xvfb framebuffer (:1), shared over
 //                  VNC (:5900) + browser noVNC (:6080) — the temporary
-//                  profile, co-installable with a primary one
+//                  profile, co-installable with a primary one.
+//                  The xrdp feature is the third window into the SAME
+//                  framebuffer: xrdp (:3389, system daemon) runs an
+//                  Xvnc module that attaches to x11vnc on localhost:5900
+//                  — an RDP client lands in the running WM session, no
+//                  per-connection session spawn.
 //
 // env lines are written to ~/.config/doftiles/env by provision; the
 // units read it via EnvironmentFile (profile DISPLAY overrides the
@@ -23,7 +28,7 @@
 import { join } from "node:path";
 import { DOTS_DIR } from "./dots";
 
-export const FEATURES = ["xserver", "xinitrc", "greeter", "nested"] as const;
+export const FEATURES = ["xserver", "xinitrc", "greeter", "nested", "xrdp"] as const;
 export type Feature = (typeof FEATURES)[number];
 
 export type SessionModel = "greetd" | "wsl-systemd" | "xinit" | "nested";

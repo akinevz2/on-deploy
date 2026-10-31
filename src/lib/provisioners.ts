@@ -21,7 +21,7 @@ export interface Step {
     problem?: string;
 }
 
-type Feature2 = "xserver" | "xinitrc" | "greeter" | "nested" | "vcxsrv" | "wsl-session";
+type Feature2 = "xserver" | "xinitrc" | "greeter" | "nested" | "xrdp" | "vcxsrv" | "wsl-session";
 export type { Feature2 as Feature2Name };
 
 function sh(cmd: string, args: string[]): { code: number; out: string } {
@@ -385,6 +385,14 @@ export async function ensureVcxsrv(
             return { feature: "vcxsrv", ok: true, detail: `installed at ${c}` };
         }
     }
+    // no usable Windows partition: not a WSL-interop host (automount
+    // disabled leaves an empty /mnt/c mountpoint; devcontainer, nested
+    // stack, bare linux have nothing there at all) — nothing to do
+    let hasC = false;
+    try { hasC = (await import("node:fs")).readdirSync("/mnt/c").length > 0; } catch { hasC = false; }
+    if (!hasC) {
+        return { feature: "vcxsrv", ok: true, detail: "empty /mnt/c — not a WSL-interop host, skipped" };
+    }
     if (dryRun) {
         return { feature: "vcxsrv", ok: false, detail: "NOT FOUND on the Windows partition", problem: "would download + install" };
     }
@@ -431,4 +439,193 @@ export async function ensureVcxsrv(
         if (existsSync(c)) return { feature: "vcxsrv", ok: true, detail: `installed to ${c}` };
     }
     return { feature: "vcxsrv", ok: false, detail: "installer ran but vcxsrv.exe not found in the standard paths", problem: "post-verify failed" };
+}
+
+
+/** xrdpListen — the RDP surface's bound port: parse `port=` out of
+ *  /etc/xrdp/xrdp.ini (plain read first, sudo cat fallback). Null when
+ *  the ini is absent or carries no plain-numeric port. */
+export async function xrdpListen(): Promise<number | null> {
+    let text = "";
+    try {
+        text = await Bun.file("/etc/xrdp/xrdp.ini").text();
+    } catch {
+        const p = Bun.spawnSync(
+            ["sudo", "cat", "/etc/xrdp/xrdp.ini"],
+            { stdout: "pipe", stdin: "ignore", stderr: "pipe" },
+        );
+        if ((p.exitCode ?? 1) !== 0) return null;
+        text = (p.stdout ?? "").toString();
+    }
+    const m = text.match(/^\s*port\s*=\s*(\d+)\s*$/m);
+    return m ? Number(m[1]) : null;
+}
+
+/** ensureXrdp — the nested profile's third surface: xrdp (a SYSTEM
+ *  daemon) whose Xvnc module attaches to the ALREADY RUNNING x11vnc
+ *  framebuffer (127.0.0.1:5900) — an RDP client lands in the same
+ *  shared hlwm/Xvfb session the noVNC browser shows, no per-connection
+ *  session spawn.
+ *
+ *  Steps: install the xrdp package, patch the distro's stock xrdp.ini
+ *  IN PLACE (backup at xrdp.ini.on-deploy.bak first): pin [Xvnc]'s
+ *  port to 5900 (stock value is ask5900), move the [Globals] RDP
+ *  listen port to 3390 (3389 stays free for Windows' own RDP and the
+ *  netsh portproxy that would otherwise collide with it), and give
+ *  Xvnc the FIRST module slot so the login dialog defaults to the
+ *  shared session; then enable --now the system unit (restart only
+ *  when it was already active AND the config changed — a re-run must
+ *  not drop live RDP sessions).
+ *
+ *  Requires the nested stack: with no x11vnc on :5900 the module has
+ *  nothing to attach to and connections fail after the login dialog. */
+export async function ensureXrdp(
+    target: string, yes: boolean, dryRun: boolean,
+): Promise<Step> {
+    const INI = "/etc/xrdp/xrdp.ini";
+    const steps: string[] = [];
+
+    // 1. the package (xrdp only — the xorg backend is not needed for
+    //    Xvnc attach; installers pulling recommends may add it)
+    const missing = ["xrdp"].filter((p) => !pkgInstalled(target, p));
+    if (missing.length > 0) {
+        steps.push(`install ${missing.join(" ")}`);
+        console.log(`  xrdp: missing ${missing.join(" ")}`);
+        if (!dryRun && !yes) {
+            const ok = await confirm("  install the xrdp package? [Y/n] ");
+            if (!ok) return { feature: "xrdp", ok: false, detail: "declined", problem: "declined" };
+        }
+        const mgr = target === "manjaro" || target === "arch" ? "pacman" : "apt";
+        const args = mgr === "pacman"
+            ? ["-S", "--needed", ...missing]
+            : ["install", "-y", "--no-install-recommends", ...missing];
+        const code = await sudo(mgr, args, dryRun);
+        if (code !== 0) {
+            return { feature: "xrdp", ok: false, detail: steps.join("; "), problem: "package manager failed" };
+        }
+    }
+    if (dryRun && missing.length > 0) {
+        return { feature: "xrdp", ok: true, detail: `would install ${missing.join(" ")} + patch ${INI}` };
+    }
+
+    // 2. patch the ini: fold into [name] blocks, fix [Xvnc] port,
+    //    make Xvnc the first module block (module = carries lib=)
+    const wasActive = sh("systemctl", ["is-active", "xrdp"]).out === "active";
+    const text = await readRootFile(INI);
+    if (!text) {
+        return { feature: "xrdp", ok: false, detail: steps.join("; "), problem: `${INI} unreadable` };
+    }
+    type Block = { header: string | null; body: string[] };
+    const blocks: Block[] = [{ header: null, body: [] }];
+    for (const line of text.split("\n")) {
+        if (/^\s*\[/.test(line)) blocks.push({ header: line, body: [] });
+        else blocks[blocks.length - 1].body.push(line);
+    }
+    const secName = (b: Block): string => {
+        const m = (b.header ?? "").match(/^\s*\[([^\]]+)\]/);
+        return m ? m[1].trim().toLowerCase() : "";
+    };
+    const isModule = (b: Block): boolean => b.body.some((l) => /^\s*lib\s*=/.test(l));
+    const xi = blocks.findIndex((b) => secName(b) === "xvnc");
+    if (xi < 0) {
+        return { feature: "xrdp", ok: false, detail: steps.join("; "), problem: "no [Xvnc] section in xrdp.ini" };
+    }
+    const xu = blocks[xi];
+    let changed = false;
+    const portLine = xu.body.findIndex((l) => /^\s*port\s*=/.test(l));
+    if (portLine >= 0) {
+        if (!/^\s*port\s*=\s*5900\s*$/.test(xu.body[portLine])) {
+            xu.body[portLine] = xu.body[portLine].replace(/^\s*port\s*=.*$/, "port=5900");
+            changed = true;
+        }
+    } else {
+        xu.body.push("port=5900");
+        changed = true;
+    }
+    // [Globals] listen port → 3390 (the standard 3389 stays free for
+    // the Windows side's own RDP / netsh portproxy plans)
+    const gi = blocks.findIndex((b) => secName(b) === "globals");
+    if (gi >= 0) {
+        const gLine = blocks[gi].body.findIndex((l) => /^\s*port\s*=/.test(l));
+        if (gLine >= 0) {
+            if (!/^\s*port\s*=\s*3390\s*$/.test(blocks[gi].body[gLine])) {
+                blocks[gi].body[gLine] = blocks[gi].body[gLine].replace(/^\s*port\s*=.*$/, "port=3390");
+                changed = true;
+            }
+        } else {
+            blocks[gi].body.push("port=3390");
+            changed = true;
+        }
+    }
+    const firstModule = blocks.findIndex((b, i) => i > 0 && isModule(b) && secName(b) !== "xvnc");
+    if (firstModule >= 0 && xi > firstModule) {
+        blocks.splice(xi, 1);
+        blocks.splice(firstModule, 0, xu);
+        changed = true;
+    }
+    if (changed) {
+        steps.push(`patch ${INI} (backup at ${INI}.on-deploy.bak)`);
+        if (!dryRun) {
+            await sudo("cp", [INI, `${INI}.on-deploy.bak`], dryRun);
+            const out = blocks.flatMap((b) =>
+                b.header === null ? b.body : [b.header, ...b.body],
+            ).join("\n");
+            const p = Bun.spawn(["sudo", "tee", INI],
+                { stdin: "pipe", stdout: "ignore", stderr: "inherit" });
+            p.stdin.write(out.endsWith("\n") ? out : `${out}\n`);
+            p.stdin.end();
+            await p.exited;
+        }
+    }
+
+    // 3. the system unit: enable --now when off, restart only when it
+    //    was active already and the config just changed
+    const enabled = sh("systemctl", ["is-enabled", "xrdp"]);
+    if (enabled.out !== "enabled") {
+        steps.push("systemctl enable --now xrdp");
+        if (!dryRun) {
+            const code = await sudo("systemctl", ["enable", "--now", "xrdp"], dryRun);
+            if (code !== 0) {
+                return { feature: "xrdp", ok: false, detail: steps.join("; "), problem: "enable failed" };
+            }
+        }
+    } else if (!wasActive) {
+        steps.push("systemctl start xrdp");
+        if (!dryRun) {
+            const code = await sudo("systemctl", ["start", "xrdp"], dryRun);
+            if (code !== 0) {
+                return { feature: "xrdp", ok: false, detail: steps.join("; "), problem: "start failed" };
+            }
+        }
+    } else if (changed) {
+        steps.push("systemctl restart xrdp (config patched — connected sessions drop once)");
+        if (!dryRun) {
+            const code = await sudo("systemctl", ["restart", "xrdp"], dryRun);
+            if (code !== 0) {
+                return { feature: "xrdp", ok: false, detail: steps.join("; "), problem: "restart failed" };
+            }
+        }
+    }
+
+    const enabledNow = dryRun ? true : sh("systemctl", ["is-enabled", "xrdp"]).out === "enabled";
+    return {
+        feature: "xrdp",
+        ok: enabledNow,
+        detail: steps.length ? steps.join("; ") : "already provisioned",
+        problem: enabledNow ? undefined : "post-verify failed",
+    };
+}
+
+/** readRootFile — read a root-owned file (plain Bun.file first, since
+ *  most /etc files are world-readable; sudo cat only as fallback for
+ *  the 0600 cases). Null when both fail. */
+async function readRootFile(path: string): Promise<string | null> {
+    try {
+        return await Bun.file(path).text();
+    } catch { /* fall through to sudo */ }
+    const p = Bun.spawnSync(
+        ["sudo", "cat", path],
+        { stdout: "pipe", stdin: "ignore", stderr: "pipe" },
+    );
+    return (p.exitCode ?? 1) === 0 ? (p.stdout ?? "").toString() : null;
 }

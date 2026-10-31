@@ -9,9 +9,10 @@ import Configure from '../src/commands/configure.js'
 import Deploy from '../src/commands/deploy.js'
 import Provision from '../src/commands/provision.js'
 import Snapshot from '../src/commands/snapshot.js'
+import Toolchain from '../src/commands/toolchain.js'
 
 // Narrow list of command names to avoid typeof-cycles in types
-const names = ['check', 'configure', 'deploy', 'provision', 'snapshot'] as const
+const names = ['check', 'configure', 'deploy', 'provision', 'snapshot', 'toolchain'] as const
 type GeneratedNames = typeof names[number]
 
 const modules: Record<GeneratedNames, Command<any>> = {
@@ -19,7 +20,8 @@ const modules: Record<GeneratedNames, Command<any>> = {
   'configure': Configure,
   'deploy': Deploy,
   'provision': Provision,
-  'snapshot': Snapshot
+  'snapshot': Snapshot,
+  'toolchain': Toolchain
 } as const
 
 const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
@@ -68,6 +70,16 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
         'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'list what would be collected, copy nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
       },
       path: './src/commands/snapshot'
+    },
+  'toolchain': {
+      name: 'toolchain',
+      description: 'make install assurance steps: bun toolchain, bun trust, herbctl binary (bun/ensure formerly separate Makefile recipes)',
+      options: {
+        'yes': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'assume yes (non-interactive; no prompts here yet)', short: 'y', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print what would be done, change nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'force': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'rebuild the ensured binaries even when installed', short: 'f', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+      },
+      path: './src/commands/toolchain'
     }
 } as const
 
