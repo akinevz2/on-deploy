@@ -316,6 +316,29 @@ export async function enableUnits(
 }
 
 
+/** novncListener — the nested stack's browser surface: parse the
+ *  --listen address out of the LIVE novnc unit (the deployed unit
+ *  file, via `systemctl --user cat`, so drop-ins and env overrides
+ *  count) — the reported port is what is actually bound, not a
+ *  hardcoded guess. Null when the unit cannot be found or has no
+ *  --listen argument. */
+export async function novncListener(): Promise<string | null> {
+    const cat = Bun.spawnSync(
+        ["systemctl", "--user", "cat", "novnc.service"], { stdout: "pipe" },
+    );
+    let text = (cat.exitCode ?? 1) === 0 ? (cat.stdout ?? "").toString() : "";
+    if (!text) {
+        try {
+            text = await Bun.file(
+                join(process.env.HOME!, ".config/systemd/user/novnc.service"),
+            ).text();
+        } catch { return null; }
+    }
+    const m = text.match(/--listen\s+(\S+)/);
+    return m?.[1] ?? null;
+}
+
+
 /** ensureNested — install the nested-stack packages (Xvfb, x11vnc,
  *  noVNC) through the target's package manager. The units themselves
  *  are enabled by the profile's units = line. */

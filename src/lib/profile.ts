@@ -12,7 +12,7 @@
 //                  server (VcXsrv) to be reachable — the WSL bypass
 //   - xinit        startx runs ~/.xinitrc (exec herbstluftwm); no DM
 //   - nested       hlwm inside the Xvfb framebuffer (:1), shared over
-//                  VNC (:5901) + browser noVNC (:6081) — the temporary
+//                  VNC (:5900) + browser noVNC (:6080) — the temporary
 //                  profile, co-installable with a primary one
 //
 // env lines are written to ~/.config/doftiles/env by provision; the

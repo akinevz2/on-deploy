@@ -5,7 +5,7 @@ import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
 import { checkDotsEnv, readRequires } from "../lib/dots";
 import { readProfile, type Profile } from "../lib/profile";
-import { ensureXServer, ensureXinitrc, ensureGreeter, verifyWslSession, writeProfileEnv, enableUnits, ensureNested, ensureVcxsrv } from "../lib/provisioners";
+import { ensureXServer, ensureXinitrc, ensureGreeter, verifyWslSession, writeProfileEnv, enableUnits, ensureNested, ensureVcxsrv, novncListener } from "../lib/provisioners";
 
 export default defineCommand({
     name: "provision",
@@ -79,6 +79,17 @@ export default defineCommand({
         }
         if (profile.units.length > 0) {
             await runStep("units", () => enableUnits(profile, !!flags.yes, !!flags["dry-run"]));
+            // the nested stack: name its browser surface AFTER the
+            // services are printed — resolved from the live novnc unit
+            const enabled = profile.units.map((u) => (u.endsWith(".service") ? u : `${u}.service`));
+            if (enabled.includes("novnc.service")) {
+                const listen = await novncListener();
+                console.log(
+                    listen
+                        ? `  nested     noVNC (${enabled.includes("x11vnc.service") ? "VNC backend on localhost:5900 via x11vnc, " : ""}browser surface) listens on ${listen} — open http://${listen}/vnc.html`
+                        : "  nested     novnc.service enabled — its ExecStart carries no --listen (port unknown)",
+                );
+            }
         }
         if (failed > 0) {
             console.error(`provision: ${failed} step(s) failed`);
