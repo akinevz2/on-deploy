@@ -62,6 +62,11 @@ function pkgInstalled(target: string, pkg: string): boolean {
 }
 
 async function confirm(prompt: string): Promise<boolean> {
+    // non-TTY stdin never EOFs mid-session: block-proof the prompt
+    if (process.stdin.isTTY !== true) {
+        console.log("    non-interactive without --yes — declined");
+        return false;
+    }
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     const a = (await rl.question(prompt)).trim().toLowerCase();
     rl.close();

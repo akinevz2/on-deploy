@@ -9,10 +9,20 @@ import { z } from "zod";
 import * as readline from "node:readline/promises";
 import { checkDotsEnv, readRequires } from "../lib/dots";
 import { resolvePackage, runInstall, installed } from "../lib/deployScript";
+import { missing } from "../lib/dots";
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
+const isInteractive = (): boolean => process.stdin.isTTY === true;
+
 async function confirm(prompt: string): Promise<boolean> {
+    // a non-TTY stdin never EOFs mid-session: readline.question would
+    // block forever. Non-interactive runs must say --yes (the dots
+    // house convention: service-action's YES=1 gate).
+    if (!isInteractive()) {
+        console.error("         non-interactive without --yes — skipped");
+        return false;
+    }
     const a = (await rl.question(prompt)).trim().toLowerCase();
     return a === "" || a === "y" || a === "yes"; // [Y/n]: Enter = yes
 }
@@ -21,6 +31,16 @@ export async function walk(yes: boolean, dryRun: boolean): Promise<number> {
     const requires = await readRequires();
     const target = requires.target;
     console.log(`deploy target: ${target} (from wm.requires)`);
+    // fail fast instead of hanging: a non-interactive run without --yes
+    // can never answer the per-binary confirmations
+    if (!dryRun && !yes && !isInteractive() && missing(await Promise.resolve(requires.binaries)).length > 0) {
+        console.error(
+            "deploy: non-interactive terminal without --yes — " +
+            "the confirmation prompts would hang. Re-run with --yes " +
+            "(or interactively).",
+        );
+        return 1;
+    }
 
     let failed = 0;
     for (const binary of requires.binaries) {
