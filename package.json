@@ -4,7 +4,7 @@
   "description": "Rigorous dotfiles requirement deployer \u2014 reads wm.requires, verifies each binary, installs the missing ones via the platform deploy script",
   "type": "module",
   "bin": {
-    "on-deploy": "./src/index.ts"
+    "on-deploy": "src/index.ts"
   },
   "scripts": {
     "dev": "bunli dev",
@@ -25,5 +25,18 @@
   },
   "trustedDependencies": [
     "bun"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/akinevz2/on-deploy.git"
+  },
+  "license": "GPL-2.0-or-later",
+  "files": [
+    "src/",
+    "README.md",
+    "LICENSE",
+    "package.json",
+    "bunli.config.ts",
+    ".bunli/"
   ]
 }
