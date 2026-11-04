@@ -5,6 +5,11 @@
 // is called with NO arguments and must run the interactive requirement
 // walk. That branch bypasses bunli's arg parsing (which would print
 // help on empty argv).
+//
+// `apply` was FOLDED into `configure` (configure applies itself);
+// `toolchain` + `deps` MOVED OUT to the depends stow package
+// (depends/.local/bin/components — installing components is a package
+// concern, and herbctl/polyframes builds do not belong in on-deploy).
 
 import { createCLI } from "@bunli/core";
 import installCommand, { walk } from "./commands/install";
@@ -16,12 +21,11 @@ import unstowCommand from "./commands/unstow";
 import enableCommand from "./commands/enable";
 import disableCommand from "./commands/disable";
 import configureCommand from "./commands/configure";
-import applyCommand from "./commands/apply";
-import toolchainCommand from "./commands/toolchain";
-import depsCommand from "./commands/deps";
 import archiveCommand from "./commands/archive";
 import unarchiveCommand from "./commands/unarchive";
 import packagesCommand from "./commands/packages";
+import preserveCommand from "./commands/preserve";
+import servicesCommand from "./commands/services";
 
 const argv = process.argv.slice(2);
 if (argv.length === 0) {
@@ -41,7 +45,7 @@ if (compiled) process.chdir("/");
 
 const cli = await createCLI({
     name: "on-deploy",
-    version: "1.0.0",
+    version: "1.1.0",
     description:
         "Rigorous dotfiles requirement deployer: verify wm.requires binaries, install the missing ones via the platform deploy script.",
 });
@@ -55,12 +59,11 @@ cli.command(unstowCommand);
 cli.command(enableCommand);
 cli.command(disableCommand);
 cli.command(configureCommand);
-cli.command(applyCommand);
-cli.command(toolchainCommand);
-cli.command(depsCommand);
 cli.command(archiveCommand);
 cli.command(unarchiveCommand);
 cli.command(packagesCommand);
+cli.command(preserveCommand);
+cli.command(servicesCommand);
 
 if (compiled) process.chdir(origCwd);
 

@@ -22,7 +22,7 @@ import {
 } from "node:fs";
 import { checkDotsEnv, DOTS_DIR, readRequires } from "../lib/dots";
 import { readLine } from "../lib/lines";
-import { runApply } from "../lib/applyCore";
+import { runApply } from "../lib/configureCore";
 import { walk } from "./install";
 import {
     packagesWithMakefiles, printResults, runRule, stowPackages, stowPkg,
@@ -141,6 +141,29 @@ function validCredentials(name: string, email: string): string {
     if (words.length !== 3) return "name: exactly three words required";
     if (!email.includes("@")) return "email: '@' required";
     return "";
+}
+
+/** PROMPT for the git identity when dots/shell/.my-credentials is
+ *  ABSENT (gitignored; first run on a fresh machine — the shell rc
+ *  files autoload it once it exists). Two simple lines: name, email.
+ *  Returns the values, or null when the user skipped / is non-tty. */
+async function promptCredentials(): Promise<{ name: string; email: string } | null> {
+    if (existsSync(CRED_REPO) || existsSync(CRED_HOME)) return null;
+    if (!process.stdin.isTTY) return null;
+    console.log("configure: no git credentials on file(~/.my-credentials missing)");
+    console.log("  the shell rc files load git identity from that file at startup —");
+    console.log("  two lines: your full name (three words), then your email.");
+    process.stdout.write("  name  (empty=skip): ");
+    const name = (await readLine()).trim();
+    process.stdout.write("  email (empty=skip): ");
+    const email = (await readLine()).trim();
+    if (!name || !email) {
+        console.log("configure: skipped — git identity stays unset (re-run 'on-deploy configure' later)");
+        return null;
+    }
+    const warn = validCredentials(name, email);
+    if (warn) console.log(`configure: note — ${warn} (accepting anyway)`);
+    return { name, email };
 }
 
 // One-line stdin reader — NOT node:readline (bun's readline wedges;
@@ -279,6 +302,9 @@ export default defineCommand({
         show: option(z.boolean().optional(), {
             description: "print the current configuration",
         }),
+        "dry-run": option(z.boolean().optional(), {
+            description: "save nothing; print what the folded apply would run",
+        }),
     },
     handler: async ({ flags }) => {
         const env = checkDotsEnv();
@@ -293,8 +319,15 @@ export default defineCommand({
             console.log(`target:    ${m.target}`);
             console.log(`binaries:  ${m.binaries.join(" ")}`);
             console.log(`session:   ${readSession() || "wsl-systemd (default)"}`);
-            console.log(`git:       ${cred.name} <${cred.email}>`);
+            console.log(`git:       ${cred.name || "(unset)"} <${cred.email}>`);
             return;
+        }
+
+        // ABSENT credentials (fresh machine): prompt for the two lines
+        // unless the caller already supplied them via flags
+        let prompted: { name: string; email: string } | null = null;
+        if (!cred.name && !cred.email && !flags.name && !flags.email) {
+            prompted = await promptCredentials();
         }
 
         if (flags.target) m.target = flags.target.trim();
@@ -315,7 +348,9 @@ export default defineCommand({
             writeSession(flags.session);
         }
         let credNotes: string[] | null = null;
-        if (flags.name || flags.email) {
+        if (prompted) {
+            credNotes = writeCredentials(prompted.name, prompted.email);
+        } else if (flags.name || flags.email) {
             const n = flags.name ?? cred.name;
             const e = flags.email ?? cred.email;
             const err = validCredentials(n, e);
@@ -386,5 +421,14 @@ export default defineCommand({
         for (const note of credNotes ?? []) {
             console.log(`configure: ${note}`);
         }
+        // FOLDED `apply`: configuration APPLIES itself (the generic
+        // per-platform step list; the verbose platform detail lives in
+        // lib/configureCore.ts). `--dry-run` prints without running.
+        const failed = await runApply({ dryRun: !!flags["dry-run"] });
+        if (failed > 0) {
+            console.error(`configure: ${failed} apply step(s) failed`);
+            process.exit(1);
+        }
+        console.log("configure: saved + applied");
     },
 });

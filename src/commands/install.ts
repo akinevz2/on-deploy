@@ -12,6 +12,7 @@ import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
 import { checkDotsEnv, readRequires, missing } from "../lib/dots";
 import { resolvePackage, runInstall, installed } from "../lib/deployScript";
+import { confirm } from "../lib/lines";
 
 const isInteractive = (): boolean => process.stdin.isTTY === true;
 
@@ -22,7 +23,7 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
     console.log(`target: ${target} (wm.requires)`);
     // fail fast instead of hanging: a non-interactive run without --yes
     // can never answer the per-binary confirmations
-    if (!dryRun && !yes && !isInteractive() && missing(await Promise.resolve(requires.binaries)).length > 0) {
+    if (!dryRun && !yes && !isInteractive() && missing(requires.binaries).length > 0) {
         console.error(
             "deploy: non-interactive terminal without --yes — " +
             "the confirmation prompts would hang. Re-run with --yes " +

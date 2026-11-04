@@ -3,7 +3,7 @@
 
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 
 export const DOTS_DIR = join(process.env.HOME!, "dots");
 export const INSTALL_BIN_DIR = join(process.env.HOME!, ".local/bin/install");
@@ -27,18 +27,26 @@ export function checkDotsEnv(): EnvCheck {
     let cwd = process.cwd();
     if (cwd !== DOTS_DIR) {
         // walk up from the cwd looking for the repo root (wm.requires
-        // marker) — accepts subdirectories, rejects unrelated dirs
+        // marker) — accepts subdirectories, rejects unrelated dirs.
+        // Compare REALPATHS: HOME itself may be reached through a symlink
+        // (e.g. /tmp/opencode/.../home/dots -> ~/dots), and a raw string
+        // comparison would reject a genuinely-inside-the-repo cwd.
+        const realDots = (() => { try { return realpathSync(DOTS_DIR); } catch { return DOTS_DIR; } })();
         let dir = cwd;
         let found = "";
         for (let i = 0; i < 8 && dir !== "/" && dir !== ""; i += 1) {
             if (existsSync(join(dir, "wm.requires"))) { found = dir; break; }
             dir = dirname(dir);
         }
-        if (!found || join(found) !== DOTS_DIR) {
+        let realFound = found;
+        try { realFound = realpathSync(found); } catch { /* keep raw */ }
+        if (!found || realFound !== realDots) {
             return { ok: false, problem: `must run inside ${DOTS_DIR} or a subdirectory of it (cwd: ${cwd})` };
         }
-        cwd = DOTS_DIR;
-        process.chdir(DOTS_DIR);
+        // chdir through the REAL path so downstream spawnSync calls that
+        // inherit the cwd see a canonical path
+        cwd = realDots;
+        process.chdir(realDots);
     }
     const remote = sh("git", ["remote", "get-url", "origin"], DOTS_DIR);
     if (remote.code !== 0 || !remote.out) {

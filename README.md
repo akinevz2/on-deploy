@@ -10,15 +10,22 @@ on-deploy install      install the missing from the repos
 on-deploy pkg          generic ops on GIVEN names:
                        pkg installed|search|install|remove <name>...
 on-deploy configure    configure the deployment: target, binaries,
-                       deployment model, services, git credentials
-on-deploy apply        apply the deployment model to the platform
-                       (generic steps: env, wsl verify, units)
+                       deployment model, git credentials — and APPLY
+                       it (the folded apply: env, wsl verify, units;
+                       credentials are PROMPTED for when absent)
 on-deploy packages     group ops on the package Makefiles:
                        packages <rule> [pkg...]
 on-deploy archive      back up a package's live files to defaults/
 on-deploy unarchive    restore them
-on-deploy toolchain    bootstrap assurances (bun, trust, herbctl)
-on-deploy deps         dependency deployment (polyframes)
+on-deploy preserve     resolve stow conflicts before (re)stowing;
+                       preserved bytes live in the XDG state store
+on-deploy services     run the service.order units:
+                       check|start|stop|restart|status
+
+(no `apply` — folded into `configure`; no `toolchain` / `deps` —
+installing components moved to the depends stow package:
+depends/.local/bin/components via its package Makefile.)
+```
 ```
 
 ## The golden rule
@@ -31,8 +38,6 @@ operations on the names it is GIVEN. All per-package special steps
 to patch) live in the package Makefiles
 (`dots/<pkg>/.local/share/<pkg>/Makefile`, bash), which defer to
 `on-deploy pkg` for the platform package-manager work.
-
-## The contract
 
 ## The contract
 
@@ -106,13 +111,21 @@ entirely from the caller (the package Makefiles). Platform resolution
   (the wm.requires session line)
 - git credentials — stored in `dots/shell/.my-credentials`
   (gitignored, stowed to ~/.my-credentials), NOT in the user's
-  profile; writes the file, regenerates `~/.my-credentials-env`,
-  applies git config
+  profile; when the file is ABSENT (fresh machine) and no flags were
+  given, two simple lines are PROMPTED for (name, then email) and
+  written so the stowed shell rc files autoload the git identity.
+  Flag edits (`--name --email`) still work; validation accepts but
+  warns.
 
 Flags: `--target --add --remove --session --features --units --name
---email --show`. Bare: the numbered TUI.
+--email --show --dry-run`. Bare: the numbered TUI (a TTY). Bare +
+non-TTY: prompts skipped, configuration saved with defaults.
 
-### `apply` — apply the deployment model to the platform
+Configuration FOLDS the apply: every save ends by running the
+deployment model's generic step list (see below) and prints
+`configure: saved + applied`.
+
+### The folded apply (inside configure)
 
 Resolves the platform (debian-wsl | debian | archlinux) and runs its
 GENERIC step list: `env` (write ~/.config/doftiles/env) -> WSL-only
@@ -120,10 +133,8 @@ GENERIC step list: `env` (write ~/.config/doftiles/env) -> WSL-only
 units). NO package groups here: those are package Makefile rules
 (`xserver`, `xinitrc`, `nested`, `xrdp`, `greeter` in the
 herbstluftwm package Makefile) — run via `on-deploy packages <rule>`.
-Configuration is the configure wizard (`on-deploy configure`).
-
-- `--dry-run` — print the steps
-- `--profile <name>` — read a different profile file from ~/dots
+`--dry-run` prints what the apply would run and saves nothing.
+`--show` prints the current configuration and runs nothing.
 
 ### `packages` — group operations on the package Makefiles
 
@@ -145,22 +156,74 @@ dots-owned path). The package Makefiles call these from their
 install/uninstall rules when the package touches pre-existing user
 files.
 
-### `toolchain` / `deps` — the artifact assurances
+### `preserve` — safe stow on a machine with pre-existing user files
 
-bun toolchain + postinstall trust + herbctl build (`toolchain`);
-polyframes artifact per the recorded method (`deps`,
-`--method source|npm|release`, `--uninstall`).
+`on-deploy preserve <pkg> [pkg2 ...]` resolves stow conflicts so a
+fresh machine can stow without clobbering (or failing on) pre-existing
+user files:
+
+- **Default (archive-first, "dots wins")**: conflicts are copied into
+  `~/.local/state/doftiles/preserve/<pkg>/` (XDG state, outside the
+  repo — user content never lands in the worktree), removed from
+  `$HOME`, then `stow -R` deploys the dots version. The user's bytes
+  stay in the store until restore is asked for. On a TTY the verb
+  offers restore-or-keep (default: keep); non-TTY defaults to keep
+  without blocking.
+- **`--adopt` ("mine wins")**: `stow -R --adopt` moves $HOME contents
+  into the package tree (deployed = the user's bytes) and reports
+  `git diff` for review. A snapshot of the adopted content is kept in
+  the store as insurance; revert is `git checkout HEAD -- <pkg>`. A
+  dirty worktree aborts the package (a clean `HEAD` is the restore
+  point) — exit 2.
+- `--dry-run` prints the plan; `--yes/-y` skips the prompt (default
+  keep); `--keep` / `--restore` select the branch explicitly;
+  `--store <dir>` overrides the store root. Bare + TTY opens a
+  whiptail checklist.
+
+`preserve` and `archive`/`unarchive` are complementary: `archive`
+backs up for *uninstall-time* restore into `$HOME`; `preserve`
+answers "first deployment on a dirty machine" and its restore writes
+into the *package tree* (the dots-owned side), which `unarchive`
+deliberately refuses to touch.
+
+### `services` — run the service.order units
+
+```
+on-deploy services check      daemon-reload + enable --now each unit
+on-deploy services start      daemon-reload + start each unit
+on-deploy services stop       drop .wants links (never `disable` — a
+                              stow-linked unit file would be DELETED),
+                              cancel pending start/restart jobs, stop
+on-deploy services restart    daemon-reload + restart each unit
+on-deploy services status     report is-active per unit
+```
+
+All unit actions run `--no-block` (a headless herbst polls 30s for X
+per attempt and would idle the caller). start/stop/restart confirm on
+a TTY; non-interactive runs REQUIRE `--yes`. The unit list comes
+entirely from the repo-level `service.order` manifest — no package
+knowledge here.
+
+### `toolchain` / `deps` — REMOVED (moved to the depends package)
+
+Installing components is a package concern. The bun toolchain, bun
+postinstall trust, the herbctl build and the polyframes deploy
+(source | npm | release, method recorded in ~/.config/doftiles.conf)
+now live in `depends/.local/bin/components` (stowed to
+`~/.local/bin/components`), reached through the depends package
+Makefile: `make -C depends/.local/share/depends install`, which
+`on-deploy packages install` runs like any other package.
 
 ## How it runs in practice
 
-- **`make bootstrap`** (dots Makefile) = submodules -> stow ->
-  polyframes deploy -> `on-deploy` (the bare invocation = check +
-  interactive install walk) -> systemd enable + status.
-- **`make install`** (dots Makefile) = stow everything + run each
-  package's dependency Makefile (install rule).
+- **`make bootstrap`** (dots Makefile) = submodules → build the
+  on-deploy binary → `configure` → `install` (the requirement walk)
+  → `stow` → `packages install` (components included) → `services
+  check` → status.
+- **`make install`** (dots Makefile) = the same sequence minus
+  submodules/configure (incremental: keeps the recorded config).
 - **`~/.local/bin/on.deploy`** is a shim to this binary — the Makefile
   target name is historic.
-- `make provision` — runs `on-deploy apply` (see the dots Makefile).
 
 ## Project shape
 
@@ -178,16 +241,19 @@ polyframes artifact per the recorded method (`deps`,
 ## Delegation chain
 
 ```
-dots Makefile (install)
-  └─ dots/<pkg>/.local/share/<pkg>/Makefile   standard rules +
-       feature rules (bash — the special steps: what to install for a
-       feature, which service to restart, what to patch)
+dots Makefile                  bootstrap | install/stow | services-* |
+                               status — short on-deploy sequences
+  └─ on-deploy stow|unstow --only <pkgs>
+  └─ on-deploy packages <rule> — the group runner over the package
+       Makefiles (dots/<pkg>/.../Makefile):
+       └─ depends/.local/bin/components   install the components
+          (bun, trust, herbctl, polyframes) — the only package with
+          its own binary installer, reached through its Makefile
        └─ on-deploy pkg <op> <name>...   (platform package manager)
-       └─ on-deploy toolchain | deps     (artifact assurances)
        └─ on-deploy archive|unarchive <pkg>  (overwrites guard)
-on-deploy packages <rule>  — the group runner over those Makefiles
-on-deploy apply            — the generic platform steps (env, verify,
-                             units) per the deployment model
+       └─ on-deploy preserve <pkg>          (conflict-safe stow)
+  └─ on-deploy configure — the manifest edits + the folded apply
+  └─ on-deploy services <action> — the service.order runner
 ```
 
 Binary dependency management ALWAYS flows through on-deploy; the

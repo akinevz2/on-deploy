@@ -4,53 +4,43 @@
 import type { Command, CLI, GeneratedOptionMeta, RegisteredCommands, CommandOptions, GeneratedCommandMeta } from '@bunli/core'
 import { createGeneratedHelpers, registerGeneratedStore } from '@bunli/core'
 
-import Apply from '../src/commands/apply.js'
 import Archive from '../src/commands/archive.js'
 import Check from '../src/commands/check.js'
 import Configure from '../src/commands/configure.js'
-import Deps from '../src/commands/deps.js'
 import Disable from '../src/commands/disable.js'
 import Enable from '../src/commands/enable.js'
 import Install from '../src/commands/install.js'
 import Packages from '../src/commands/packages.js'
 import Pkg from '../src/commands/pkg.js'
+import Preserve from '../src/commands/preserve.js'
 import Search from '../src/commands/search.js'
+import Services from '../src/commands/services.js'
 import Stow from '../src/commands/stow.js'
-import Toolchain from '../src/commands/toolchain.js'
 import Unarchive from '../src/commands/unarchive.js'
 import Unstow from '../src/commands/unstow.js'
 
 // Narrow list of command names to avoid typeof-cycles in types
-const names = ['apply', 'archive', 'check', 'configure', 'deps', 'disable', 'enable', 'install', 'packages', 'pkg', 'search', 'stow', 'toolchain', 'unarchive', 'unstow'] as const
+const names = ['archive', 'check', 'configure', 'disable', 'enable', 'install', 'packages', 'pkg', 'preserve', 'search', 'services', 'stow', 'unarchive', 'unstow'] as const
 type GeneratedNames = typeof names[number]
 
 const modules: Record<GeneratedNames, Command<any>> = {
-  'apply': Apply,
   'archive': Archive,
   'check': Check,
   'configure': Configure,
-  'deps': Deps,
   'disable': Disable,
   'enable': Enable,
   'install': Install,
   'packages': Packages,
   'pkg': Pkg,
+  'preserve': Preserve,
   'search': Search,
+  'services': Services,
   'stow': Stow,
-  'toolchain': Toolchain,
   'unarchive': Unarchive,
   'unstow': Unstow
 } as const
 
 const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
-  'apply': {
-      name: 'apply',
-      description: 'Apply the configured deployment: resolve the deploy target (debian-wsl | debian | archlinux), run its generic step list',
-      options: {
-        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print what would run', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
-      },
-      path: './src/commands/apply'
-    },
   'archive': {
       name: 'archive',
       description: 'Back up the current (not dots-owned) $HOME files of a stow package into ~/dots/defaults/',
@@ -77,20 +67,10 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
         'session': { type: 'z.string.optional', required: false, hasDefault: false, schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
         'name': { type: 'z.string.optional', required: false, hasDefault: false, description: 'git user name (three words; stored in dots/shell/.my-credentials)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
         'email': { type: 'z.string.optional', required: false, hasDefault: false, description: 'git user email (stored in dots/shell/.my-credentials)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
-        'show': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print the current configuration', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+        'show': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print the current configuration', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'save nothing; print what the folded apply would run', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
       },
       path: './src/commands/configure'
-    },
-  'deps': {
-      name: 'deps',
-      description: 'Deploy the doftiles dependencies (polyframes) — ensure | --force | --method source|npm|release | --uninstall',
-      options: {
-        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print what would be done, change nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
-        'force': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'redeploy even when the artifact exists (the refresh flow)', short: 'f', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
-        'method': { type: 'z.enum.optional', required: false, hasDefault: false, description: 'deploy with this method and record it (overrides the conf)', enumValues: ["source","npm","release"], schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
-        'uninstall': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'remove the artifact per the recorded method, reset the conf', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
-      },
-      path: './src/commands/deps'
     },
   'disable': {
       name: 'disable',
@@ -132,6 +112,19 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
       },
       path: './src/commands/pkg'
     },
+  'preserve': {
+      name: 'preserve',
+      description: 'Resolve stow conflicts for packages before (re)stowing, preserving the user\'s pre-existing files in the XDG state store',
+      options: {
+        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print the plan per package, change nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'yes': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'assume yes (non-interactive; default is keep)', short: 'y', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'adopt': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'adopt-flow: stow --adopt the pre-existing $HOME files into the repo and report git diff (mine wins)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'keep': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'skip the prompt; keep the deployed content', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'restore': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'skip the prompt; restore stored user content (or revert to dots in --adopt mode)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'store': { type: 'z.string.optional', required: false, hasDefault: false, description: 'override the store root (default ~/.local/state/doftiles/preserve)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+      },
+      path: './src/commands/preserve'
+    },
   'search': {
       name: 'search',
       description: 'Resolve the providing package of required binaries in the target repositories (read-only)',
@@ -141,6 +134,14 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
       },
       path: './src/commands/search'
     },
+  'services': {
+      name: 'services',
+      description: 'Run service.order units: check|start|stop|restart|status (systemd --user, --no-block, stow-safe disable)',
+      options: {
+        'yes': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'no confirmation (non-interactive)', short: 'y', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+      },
+      path: './src/commands/services'
+    },
   'stow': {
       name: 'stow',
       description: 'Stow packages (TUI or explicit list) — stow',
@@ -148,16 +149,6 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
         'only': { type: 'z.string.optional', required: false, hasDefault: false, description: 'comma/space-separated packages (skips the TUI)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
       },
       path: './src/commands/stow'
-    },
-  'toolchain': {
-      name: 'toolchain',
-      description: 'make install assurance steps: bun toolchain, bun trust, herbctl binary (bun/ensure formerly separate Makefile recipes)',
-      options: {
-        'yes': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'assume yes (non-interactive; no prompts here yet)', short: 'y', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
-        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print what would be done, change nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
-        'force': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'rebuild the ensured binaries even when installed', short: 'f', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
-      },
-      path: './src/commands/toolchain'
     },
   'unarchive': {
       name: 'unarchive',
