@@ -41,7 +41,7 @@ import { stowPkg } from "./pkgops";
 
 export const PRESERVE_STORE_NAME = "preserve";
 
-export type PreserveMode = "default" | "adopt";
+export type PreserveMode = "default" | "adopt" | "mixed";
 
 export interface Conflict {
     /** path relative to the package (and, via stow, to $HOME) */
@@ -210,9 +210,11 @@ export function snapshotAdopted(store: string, pkgDir: string, conflicts: Confli
     return conflicts.filter((c) => c.kind !== "symlink-dangling");
 }
 
-/** write the per-package manifest (both flows) */
+/** write the per-package manifest (both flows + the mixed decisions) */
 export function writePreserveManifest(
-    store: string, pkg: string, mode: PreserveMode, conflicts: Conflict[], at = new Date().toISOString(),
+    store: string, pkg: string, mode: PreserveMode, conflicts: Conflict[],
+    at = new Date().toISOString(),
+    decisions: { rel: string; decision: "dots" | "mine" }[] = [],
 ): void {
     mkdirSync(store, { recursive: true });
     manifest(store, {
@@ -220,6 +222,7 @@ export function writePreserveManifest(
         pkg,
         mode,
         at,
+        decisions,
         conflicts: conflicts.map((c) => ({
             rel: c.rel, kind: c.kind, bytes: c.bytes ?? null, linkTarget: c.linkTarget ?? null,
         })),
@@ -277,6 +280,12 @@ export interface PreserveOptions {
     adopt: boolean;
     /** override store root (default: ~/.local/state/doftiles/preserve) */
     store?: string;
+    /** per-file decisions from the interactive resolver (mixed mode):
+     *  archive+remove the dots-wins files (default semantics), copy the
+     *  mine-wins bytes into the package tree (per-file adopt), then
+     *  stow -R once. Supersessions adopt/keep/restore prompts. */
+    dotsWins?: Conflict[];
+    mineWins?: Conflict[];
 }
 
 export interface PreserveResult {
@@ -349,6 +358,40 @@ export async function preservePackage(
         }
         lines.push(`preserve ${pkg}: stowed ${pkg} (no conflicts)`);
         return { pkg, status: "noop", code: 0, lines };
+    }
+
+    // --- mixed mode: per-file decisions from the interactive resolver --
+    if (opts.dotsWins !== undefined || opts.mineWins !== undefined) {
+        const dotsWins = opts.dotsWins ?? [];
+        const mineWins = opts.mineWins ?? [];
+        const decisions: { rel: string; decision: "dots" | "mine" }[] = [
+            ...dotsWins.map((c) => ({ rel: c.rel, decision: "dots" as const })),
+            ...mineWins.map((c) => ({ rel: c.rel, decision: "mine" as const })),
+        ];
+        if (dotsWins.length > 0) copyToStore(store, dotsWins);
+        writePreserveManifest(store, pkg, "mixed", conflicts, undefined, decisions);
+        removeConflicts(dotsWins);
+        for (const c of mineWins) {
+            if (c.kind === "symlink-dangling") continue;
+            const dest = join(dots, pkg, c.rel);
+            mkdirSync(dirname(dest), { recursive: true });
+            copyFileSync(c.homePath, dest);
+        }
+        lines.push(
+            `preserve ${pkg}: ${dotsWins.length} archived to the store, ` +
+            `${mineWins.length} adopted into the repo:`,
+        );
+        for (const d of decisions) {
+            const c = conflicts.find((x) => x.rel === d.rel);
+            lines.push(`  ${d.rel} (${c?.kind ?? "?"}) -> ${d.decision === "mine" ? "ADOPTED (you may want to commit it)" : "dots version (mine is in the store)"}`);
+        }
+        const r = seams.stow ? seams.stow(pkg, false) : stowWithAdopt(pkg, false, home, dots);
+        if (!r.ok) {
+            lines.push(...r.lines, `  stow FAILED for ${pkg} after resolving — see store`);
+            return { pkg, status: "failed", code: 1, lines };
+        }
+        lines.push(`preserve ${pkg}: stowed (mixed resolution)`);
+        return { pkg, status: "ok", code: 0, lines };
     }
 
     // --- default flow (archive-first, "dots wins") ---------------------

@@ -1,0 +1,37 @@
+diff --git a/src/prompt/runtime/open-tui-session.tsx b/src/prompt/runtime/open-tui-session.tsx
+index 4936227521be073f9f221a0289e342ffca4c889c..1de6289e2520a99a3861d5a0558c2790e41d8bd3 100644
+--- a/src/prompt/runtime/open-tui-session.tsx
++++ b/src/prompt/runtime/open-tui-session.tsx
+@@ -2,6 +2,7 @@
+ import { createCliRenderer, CliRenderEvents } from "@opentui/core";
+ import type { KeyEvent } from "@opentui/core";
+ import { createRoot } from "@opentui/react";
++
+ import type { ReactNode } from "react";
+ 
+ import { formatFixedWidth } from "../../components/text-layout.js";
+@@ -288,6 +289,24 @@ function createOpenTuiRendererSessionWithDependencies(
+         promptRender = undefined;
+         promptRoot = undefined;
+         root.unmount();
++        
++        // BUGFIX(dots patch): unmounting while inside a keypress
++        // dispatch (every interactive prompt settles there) leaves the
++        // view + boundary useKeyboard cleanups in react's PENDING
++        // passive queue, which no later commit ever flushes — the
++        // handlers leak (MaxListenersExceeded ~11 prompts into the
++        // preserve resolver). A nested render+unmount commit here
++        // forces the queue to drain synchronously.
++        setImmediate(() => {
++            try {
++                if (renderer?.isDestroyed) return;
++                const drain = deps.createReactRoot(renderer!);
++                drain.render(null);
++                drain.unmount();
++            } catch {
++                // best-effort: failure here must not break the prompt
++            }
++        });
+       };
+ 
+       activeRenderer.on(deps.destroyEvent, onRendererDestroy);

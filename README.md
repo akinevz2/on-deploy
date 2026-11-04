@@ -17,8 +17,10 @@ on-deploy packages     group ops on the package Makefiles:
                        packages <rule> [pkg...]
 on-deploy archive      back up a package's live files to defaults/
 on-deploy unarchive    restore them
-on-deploy preserve     resolve stow conflicts before (re)stowing;
-                       preserved bytes live in the XDG state store
+on-deploy preserve     resolve stow conflicts before (re)stowing:
+                       bunli-native TUI — package checklist -> per-file
+                       decisions with side-by-side/inline diff; the
+                       archive-first keep flow is the non-tty fallback
 on-deploy services     run the service.order units:
                        check|start|stop|restart|status
 
@@ -158,27 +160,41 @@ files.
 
 ### `preserve` — safe stow on a machine with pre-existing user files
 
-`on-deploy preserve <pkg> [pkg2 ...]` resolves stow conflicts so a
-fresh machine can stow without clobbering (or failing on) pre-existing
-user files:
+`on-deploy preserve <pkg> [pkg2 ...]` (or `--only a,b`) resolves stow
+conflicts so a fresh machine can stow without clobbering (or failing
+on) pre-existing user files:
 
-- **Default (archive-first, "dots wins")**: conflicts are copied into
-  `~/.local/state/doftiles/preserve/<pkg>/` (XDG state, outside the
-  repo — user content never lands in the worktree), removed from
-  `$HOME`, then `stow -R` deploys the dots version. The user's bytes
-  stay in the store until restore is asked for. On a TTY the verb
-  offers restore-or-keep (default: keep); non-TTY defaults to keep
-  without blocking.
-- **`--adopt` ("mine wins")**: `stow -R --adopt` moves $HOME contents
-  into the package tree (deployed = the user's bytes) and reports
-  `git diff` for review. A snapshot of the adopted content is kept in
-  the store as insurance; revert is `git checkout HEAD -- <pkg>`. A
-  dirty worktree aborts the package (a clean `HEAD` is the restore
-  point) — exit 2.
-- `--dry-run` prints the plan; `--yes/-y` skips the prompt (default
-  keep); `--keep` / `--restore` select the branch explicitly;
-  `--store <dir>` overrides the store root. Bare + TTY opens a
-  whiptail checklist.
+- **The resolver UI (bare/`--only` on a TTY)**: a bunli-native
+  (opentui) checklist of the packages that HAVE conflicts, then per
+  package each conflicting file gets its own decision prompt:
+  - *view side-by-side diff* — full-screen `src/lib/diffview.tsx`
+    TSX component (`diff -y` halves, `d` toggles inline unified diff,
+    `q` closes)
+  - *view inline diff* — unified `git diff --no-index` in the
+    scrollback
+  - *keep the dots version* — user bytes go to the XDG store
+    (`preserve/<pkg>/`), the deployed file becomes the repo copy
+  - *adopt MY version* — copied into the package tree; committing
+    the adoption stays a manual step (manifest records both
+    decisions, mode `mixed`)
+  - cancel skips the file and the rest of the package
+- **Default (archive-first, "dots wins")** — the branch any
+  non-interactive run, `--yes`, and the Makefile fallback take:
+  conflicts are copied into `~/.local/state/doftiles/preserve/<pkg>/`
+  (XDG state, outside the repo — user content never lands in the
+  worktree), removed from `$HOME`, then `stow -R` deploys the dots
+  version. All-or-nothing: NOTHING is removed until every copy
+  succeeded. On a TTY a post-stow prompt offers restore-or-keep
+  (default keep); non-TTY defaults to keep without blocking.
+- **`--adopt` ("mine wins", whole package)**: `stow -R --adopt` moves
+  $HOME contents into the package tree (deployed = the user's bytes)
+  and reports `git diff` for review. A snapshot of the adopted
+  content is kept in the store as insurance; revert is
+  `git checkout HEAD -- <pkg>`. A dirty worktree aborts the package
+  (a clean `HEAD` is the restore point) — exit 2.
+- `--dry-run` prints the plan; `--yes/-y` skips the prompts;
+  `--keep` / `--restore` select the branch explicitly; `--store
+  <dir>` overrides the store root.
 
 `preserve` and `archive`/`unarchive` are complementary: `archive`
 backs up for *uninstall-time* restore into `$HOME`; `preserve`
@@ -228,6 +244,11 @@ Makefile: `make -C depends/.local/share/depends install`, which
 ## Project shape
 
 - bunli CLI (`bunli build` → standalone `dist/on-deploy` binary)
+- NO whiptail/newt dependency anywhere — the interactive surfaces are
+  @bunli/runtime prompts (select/multiselect/confirm/text/note,
+  rendered through opentui) plus one TSX component (`src/lib/
+  diffview.tsx`, the side-by-side diff viewer; tsconfig sets
+  react-jsx + @opentui/react as the JSX import source)
 - `src/lib/dots.ts` — the environment + manifest contract (cwd
   walk-up to the repo root, origin check, wm.requires parsing)
 - `src/lib/deployScript.ts` — the `<target>.deploy` protocol

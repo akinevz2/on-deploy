@@ -1,8 +1,9 @@
 // src/lib/pkgops.ts — package-group operations shared by the TUI verbs
 // (stow/unstow/enable/disable/packages). Output discipline: every
 // operation CAPTURES its per-package output and returns it; callers
-// print the blocks sequentially AFTER the TUI closes, so whiptail
-// never fights with make output.
+// print the blocks sequentially AFTER the TUI closes. The TUI layer
+// itself lives in lib/tui.ts (bunli-native prompts, no whiptail).
+
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -110,51 +111,6 @@ export function printResults(results: PkgResult[]): void {
         console.log(`== ${r.pkg}${r.ok ? "" : " (FAILED)"}`);
         for (const l of r.lines) console.log(`  ${l}`);
     }
-}
-
-/** whiptail (newt) can exit with the terminal still in raw/no-echo
- *  mode — any later prompt then hangs (Enter sends \r, no \n ever
- *  arrives). Restore sane modes after EVERY whiptail call. */
-function sttySane(): void {
-    Bun.spawnSync(["stty", "sane"], {
-        stdin: "inherit", stdout: "ignore", stderr: "ignore",
-    });
-}
-
-/** whiptail checklist -> selected tags (null = cancelled) */
-export function whiptailChecklist(
-    title: string, prompt: string, items: string[], preselect: string[] = [],
-): string[] | null {
-    if (items.length === 0) return [];
-    const p = Bun.spawnSync([
-        "whiptail", "--title", title, "--separate-output",
-        "--checklist", prompt, "20", "60", "12",
-        ...items.flatMap((i) => [i, "", preselect.includes(i) ? "on" : "off"]),
-    ], { stdout: "pipe", stderr: "inherit", stdin: "inherit" });
-    sttySane();
-    if ((p.exitCode ?? 1) !== 0) return null;
-    return `${p.stdout ?? ""}`.split("\n").map((s) => s.trim()).filter(Boolean);
-}
-
-/** whiptail yes/no (false on cancel) */
-export function whiptailYesNo(title: string, prompt: string): boolean {
-    const p = Bun.spawnSync(
-        ["whiptail", "--title", title, "--yesno", prompt, "12", "60"],
-        { stdout: "ignore", stderr: "inherit", stdin: "inherit" },
-    );
-    sttySane();
-    return (p.exitCode ?? 1) === 0;
-}
-/** whiptail menu -> single tag (null = cancelled) */
-export function whiptailMenu(title: string, prompt: string, items: string[]): string | null {
-    if (items.length === 0) return null;
-    const p = Bun.spawnSync([
-        "whiptail", "--title", title, "--menu", prompt, "20", "60", "12",
-        ...items.flatMap((i) => [i, ""]),
-    ], { stdout: "pipe", stderr: "inherit", stdin: "inherit" });
-    sttySane();
-    if ((p.exitCode ?? 1) !== 0) return null;
-    return `${p.stdout ?? ""}`.trim();
 }
 
 /** packages that ship a dependency Makefile (dots/<pkg>/.local/share/<pkg>/Makefile) */

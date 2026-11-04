@@ -7,7 +7,9 @@
         "noEmit": true,
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true,
+        "jsx": "react-jsx",
+        "jsxImportSource": "@opentui/react",
         "types": ["bun"]
     },
-    "include": ["src/**/*.ts", "tests/**/*.ts", "bunli.config.ts", "*.config.ts"]
+    "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts", "bunli.config.ts", "*.config.ts"]
 }

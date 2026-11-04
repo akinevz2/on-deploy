@@ -279,3 +279,52 @@ describe("stow integration (real stow, guarded)", () => {
         } finally { f.cleanup(); }
     });
 });
+
+describe("mixed per-file decisions", () => {
+    const mixedFixture = () => {
+        const f = fixture();
+        // a second conflicting file, so one pkg has two decisions
+        writeFileSync(join(f.dots, "dummy", ".config", "other.cfg"), DOTS_BYTES);
+        writeFileSync(join(f.home, ".config", "other.cfg"), USER_BYTES);
+        initGit(f.dots);
+        return f;
+    };
+
+    const mkc = (rel: string, home: string): Conflict => ({
+        rel, kind: "file", homePath: join(home, rel), bytes: USER_BYTES.length,
+    });
+
+    test("dots-wins: archived + removed; mine-wins: copied into the package tree", async () => {
+        const { preservePackage } = await import("../src/lib/preserve");
+        const f = mixedFixture();
+        try {
+            const r = await preservePackage(
+                "dummy",
+                {
+                    dryRun: false, yes: true, keep: true, restore: false, adopt: false,
+                    dotsWins: [mkc(".config/app.cfg", f.home)],
+                    mineWins: [mkc(".config/other.cfg", f.home)],
+                },
+                {
+                    stow: (pkg) => ({ ok: true, lines: [`[stub] stow ${pkg}`] }),
+                },
+                f.dots,
+                f.home,
+            );
+            expect(r.status).toBe("ok");
+            const body = r.lines.join("\n");
+            // the dots-wins file: user bytes archived, dots version left for stow
+            expect(readFileSync(join(storeDir(f.home, "dummy"), ".config", "app.cfg"), "utf8")).toBe(USER_BYTES);
+            expect(existsSync(join(f.home, ".config", "app.cfg"))).toBe(false);
+            // the mine-wins file: the PACKAGE TREE now holds the user's bytes
+            expect(readFileSync(join(f.dots, "dummy", ".config", "other.cfg"), "utf8")).toBe(USER_BYTES);
+            // the manifest records both decisions, mode=mixed
+            const man = JSON.parse(readFileSync(join(storeDir(f.home, "dummy"), "PRESERVE.json"), "utf8"));
+            expect(man.mode).toBe("mixed");
+            const byRel = Object.fromEntries(man.decisions.map((d: { rel: string; decision: string }) => [d.rel, d.decision]));
+            expect(byRel[".config/app.cfg"]).toBe("dots");
+            expect(byRel[".config/other.cfg"]).toBe("mine");
+            expect(body).toContain("ADOPTED");
+        } finally { f.cleanup(); }
+    });
+});

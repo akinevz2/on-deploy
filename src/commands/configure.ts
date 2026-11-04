@@ -26,8 +26,10 @@ import { runApply } from "../lib/configureCore";
 import { walk } from "./install";
 import {
     packagesWithMakefiles, printResults, runRule, stowPackages, stowPkg,
-    whiptailYesNo, type PkgResult,
+    type PkgResult,
 } from "../lib/pkgops";
+import type { PromptApi } from "@bunli/core";
+import { tuiText } from "../lib/tui";
 
 const KNOWN_TARGETS = ["ubuntu", "debian", "manjaro", "arch", "fedora"];
 // the candidate catalog for the checklist (the current list is always
@@ -145,129 +147,127 @@ function validCredentials(name: string, email: string): string {
 
 /** PROMPT for the git identity when dots/shell/.my-credentials is
  *  ABSENT (gitignored; first run on a fresh machine — the shell rc
- *  files autoload it once it exists). Two simple lines: name, email.
+ *  files autoload it once it exists). Two lines: name, email —
+ *  deliberately on the SIMPLE line reader (lines.ts), NOT the bunli
+ *  text prompt: under `make install` the stdin feeding races the
+ *  opentui prompt session's initialization (blank screen + lost
+ *  keystrokes); a plain line read is make-recipe-safe.
  *  Returns the values, or null when the user skipped / is non-tty. */
 async function promptCredentials(): Promise<{ name: string; email: string } | null> {
     if (existsSync(CRED_REPO) || existsSync(CRED_HOME)) return null;
     if (!process.stdin.isTTY) return null;
-    console.log("configure: no git credentials on file(~/.my-credentials missing)");
+    console.log("configure: no git credentials on file (~/.my-credentials missing)");
     console.log("  the shell rc files load git identity from that file at startup —");
     console.log("  two lines: your full name (three words), then your email.");
-    process.stdout.write("  name  (empty=skip): ");
-    const name = (await readLine()).trim();
-    process.stdout.write("  email (empty=skip): ");
-    const email = (await readLine()).trim();
-    if (!name || !email) {
-        console.log("configure: skipped — git identity stays unset (re-run 'on-deploy configure' later)");
-        return null;
+    for (;;) {
+        process.stdout.write("  name  (three words, empty=skip): ");
+        const name = (await readLine()).trim();
+        if (!name) {
+            console.log("configure: skipped — git identity stays unset (re-run 'on-deploy configure' later)");
+            return null;
+        }
+        process.stdout.write("  email (empty=skip): ");
+        const email = (await readLine()).trim();
+        if (!email) {
+            console.log("configure: skipped — git identity stays unset (re-run 'on-deploy configure' later)");
+            return null;
+        }
+        const warn = validCredentials(name, email);
+        if (!warn) return { name, email };
+        console.log(`configure: ${warn} — try again (or leave name empty to skip)`);
     }
-    const warn = validCredentials(name, email);
-    if (warn) console.log(`configure: note — ${warn} (accepting anyway)`);
-    return { name, email };
 }
 
 // One-line stdin reader — NOT node:readline (bun's readline wedges;
 // see deploy.ts). Resolves per newline, so scripted feeds work too.
-async function tuiEdit(m: Manifest): Promise<boolean> {
-    const list = (): string => m.binaries.join(" ");
+// The bunli-native menu: opentui-rendered select/multiselect frames
+// inline in the scrollback; every field validates at the prompt; Esc
+// cancels the CURRENT field (the menu stays) or quits at the menu root.
+async function tuiEdit(prompt: PromptApi, m: Manifest): Promise<boolean> {
     const cred = readCredentials() as { name: string; email: string; dirty?: boolean };
-
-    const toggleList = async (title: string, items: string[], sel: string[]): Promise<void> => {
-        console.log(`    ${title}:`);
-        items.forEach((b, i) =>
-            console.log(`      ${String(i + 1).padStart(2)}) ${sel.includes(b) ? "[x]" : "[ ]"} ${b}`),
-        );
-        process.stdout.write("    toggle numbers (space-separated, empty=skip): ");
-        const t = (await readLine()).trim();
-        for (const tok of t.split(/\s+/).filter(Boolean)) {
-            const n = Number.parseInt(tok, 10);
-            if (!Number.isFinite(n) || n < 1 || n > items.length) continue;
-            const b = items[n - 1];
-            const at = sel.indexOf(b);
-            if (at >= 0) sel.splice(at, 1);
-            else sel.push(b);
-        }
-    };
+    let session = readSession();
 
     for (;;) {
-        console.log("");
-        console.log("wm.requires");
-        console.log(`  1) deploy target    : ${m.target}`);
-        console.log(`  2) required binaries: ${list()}`);
-        console.log("deployment model (wm.requires session line)");
-        console.log(`  3) session model    : ${readSession() || "(default)"}`);
-        console.log("credentials (dots/shell/.my-credentials, stowed)");
-        console.log(`  4) git credentials  : ${cred.name} <${cred.email}>`);
-        console.log("  s) save & exit");
-        console.log("  q) quit without saving");
-        process.stdout.write("choice: ");
-        const a = (await readLine()).trim().toLowerCase();
-        if (a === "s" || a === "") break;
-        if (a === "q") return false;
+        const a = await prompt.select("configure — what to edit?", {
+            options: [
+                { label: `deploy target:     ${m.target}`, value: "target" },
+                { label: `required binaries: ${m.binaries.join(" ")}`, value: "binaries" },
+                { label: `session model:     ${session || "wsl-systemd (default)"}`, value: "session" },
+                { label: `git credentials:   ${cred.name || "(unset)"} <${cred.email || "none"}>`, value: "credentials" },
+                { label: "save + apply", value: "save" },
+                { label: "quit without saving", value: "quit" },
+            ],
+        });
+        if (prompt.isCancel(a)) {
+            console.log("configure: cancelled — nothing saved");
+            return false;
+        }
+        if (a === "quit") return false;
+        if (a === "save") break;
 
-        if (a === "1") {
-            console.log(`    targets: ${KNOWN_TARGETS.join(", ")} — or a custom name`);
-            process.stdout.write("    target: ");
-            const t = (await readLine()).trim();
-            if (t) m.target = t;
+        if (a === "target") {
+            const t = await prompt.select("deploy target", {
+                options: [
+                    ...KNOWN_TARGETS.map((k) => ({ label: k, value: k })),
+                    { label: "custom name…", value: "__custom" },
+                ],
+            });
+            if (prompt.isCancel(t)) continue;
+            if (t === "__custom") {
+                const c = await tuiText(prompt, "custom target name", {
+                    validate: (v) => /^[a-z][a-z0-9-]*$/i.test(v.trim()) ? undefined : "letters/digits/dash only",
+                });
+                if (c === null || !c.trim()) continue;
+                m.target = c.trim();
+            } else {
+                m.target = t;
+            }
             continue;
         }
-        if (a === "2") {
-            console.log("    catalog:");
+        if (a === "binaries") {
             const known = [...new Set([...CATALOG, ...m.binaries])];
-            known.forEach((b, i) =>
-                console.log(`      ${String(i + 1).padStart(2)}) ${m.binaries.includes(b) ? "[x]" : "[ ]"} ${b}`),
-            );
-            process.stdout.write(
-                "    toggle numbers (space-separated, empty=skip): ",
-            );
-            const t = (await readLine()).trim();
-            for (const tok of t.split(/\s+/).filter(Boolean)) {
-                const n = Number.parseInt(tok, 10);
-                if (!Number.isFinite(n) || n < 1 || n > known.length) continue;
-                const b = known[n - 1];
-                const at = m.binaries.indexOf(b);
-                if (at >= 0) m.binaries.splice(at, 1);
-                else m.binaries.push(b);
-            }
-            process.stdout.write(
-                "    additional binaries to ADD (comma-separated, empty=skip): ",
-            );
-            const add = (await readLine()).trim();
-            for (const b of add.split(/[,\s]+/).filter(Boolean)) {
-                if (!m.binaries.includes(b)) m.binaries.push(b);
-            }
-            process.stdout.write(
-                "    binaries to REMOVE (comma-separated, empty=skip): ",
-            );
-            const rm = (await readLine()).trim();
-            m.binaries = m.binaries.filter(
-                (b) => !rm.split(/[,\s]+/).filter(Boolean).includes(b),
-            );
+            const sel = await prompt.multiselect("required binaries — space toggles, enter confirms", {
+                options: known.map((b) => ({
+                    label: b,
+                    value: b,
+                    hint: CATALOG.includes(b) ? "catalog" : "extra",
+                })),
+                initialValues: m.binaries,
+            });
+            if (prompt.isCancel(sel)) continue;
+            // keep the manifest order stable: known-list order, then
+            // anything not listed (defensive)
+            m.binaries = known.filter((b) => sel.includes(b));
+            const extra = sel.filter((b) => !known.includes(b));
+            if (extra.length > 0) m.binaries.push(...extra);
             continue;
         }
-        if (a === "3") {
-            console.log(`    session models: ${SESSIONS.join(", ")}`);
-            process.stdout.write("    session: ");
-            let model = readSession();
-            const t = (await readLine()).trim();
-            if (t && SESSIONS.includes(t)) model = t;
+        if (a === "session") {
+            const s = await prompt.select("deployment model — how the graphical session starts", {
+                options: SESSIONS.map((k) => ({ label: k, value: k })),
+                default: SESSIONS.includes(session) ? session : undefined,
+            });
+            if (prompt.isCancel(s)) continue;
+            session = s;
             continue;
         }
-        if (a === "4") {
-            process.stdout.write(`    name (three words) [${cred.name}]: `);
-            const n = (await readLine()).trim() || cred.name;
-            process.stdout.write(`    email [${cred.email}]: `);
-            const e = (await readLine()).trim() || cred.email;
-            const err = validCredentials(n, e);
-            if (err) { console.log(`    invalid: ${err}`); continue; }
-            cred.name = n;
-            cred.email = e;
+        if (a === "credentials") {
+            const n = await tuiText(prompt, `git user name (three words) [${cred.name}]`, {
+                validate: (v) => v.trim().split(/\s+/).filter(Boolean).length !== 3
+                    ? "exactly three words required" : undefined,
+            });
+            if (n === null) continue;
+            const e = await tuiText(prompt, `git user email [${cred.email}]`, {
+                validate: (v) => v.includes("@") ? undefined : "'@' required",
+            });
+            if (e === null) continue;
+            cred.name = n.trim();
+            cred.email = e.trim();
             cred.dirty = true;
             continue;
         }
     }
-    writeSession(readSession());
+    writeSession(session);
     if (cred.dirty) {
         for (const note of writeCredentials(cred.name, cred.email)) {
             console.log(`configure: ${note}`);
@@ -306,7 +306,7 @@ export default defineCommand({
             description: "save nothing; print what the folded apply would run",
         }),
     },
-    handler: async ({ flags }) => {
+    handler: async ({ flags, prompt }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
             console.error(`on-deploy: ${env.problem}`);
@@ -363,20 +363,26 @@ export default defineCommand({
 
         const modelDirty = flags.session;
         if (!flags.target && !flags.add && !flags.remove && !modelDirty && !credNotes) {
-            // the menu works on a tty (interactive) and over a pipe
-            // (scripted feeds); EOF terminates it with a save
-            const saved = await tuiEdit(m);
-            if (!saved) {
-                console.log("configure: quit — nothing deployed");
-                return;
+            // TTY-ONLY menu: bunli 0.9.x prompts hard-fail without an
+            // interactive terminal (the old readLine menu tolerated
+            // pipes; the opentui one does not). A piped/captured run
+            // keeps the recorded manifest and just gets the folded apply.
+            const ttyMenu = process.stdin.isTTY && process.stdout.isTTY;
+            if (!ttyMenu) {
+                console.log("configure: non-interactive — keeping the recorded configuration; applying it");
             }
-            // the WIZARD: the saved configuration now drives the full
-            // deployment — binaries from the repos, each package's
-            // install rule, stow, then the deploy target apply. Output is
-            // printed sequentially per phase (the TUI has closed).
-            if (process.stdin.isTTY) {
-                const go = whiptailYesNo(
-                    "configure", "run the full deployment now?\n(install + package rules + stow + apply)",
+            if (ttyMenu) {
+                const saved = await tuiEdit(prompt, m);
+                if (!saved) {
+                    console.log("configure: quit — nothing deployed");
+                    return;
+                }
+                // the WIZARD: the saved configuration now drives the full
+                // deployment — binaries from the repos, each package's
+                // install rule, stow, then the deploy target apply.
+                const go = await prompt.confirm(
+                    "run the full deployment now? (install + package rules + stow + apply)",
+                    { default: true },
                 );
                 if (go) {
                     console.log("wizard: binaries");
@@ -402,9 +408,9 @@ export default defineCommand({
                         process.exit(1);
                     }
                     console.log("wizard: complete");
+                    return;
                 }
             }
-            return;
         }
 
         // warn when the target has no deploy script

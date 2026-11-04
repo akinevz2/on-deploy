@@ -1,23 +1,25 @@
 // src/commands/tuiRunner.ts — the shared runner for the TUI package
-// verbs: resolve the package list (args, else whiptail), run the
-// operation per package (output CAPTURED), then print the blocks
-// sequentially once the TUI has closed.
+// verbs: resolve the package list (args, else the bunli-native
+// checklist), run the operation per package (output CAPTURED), then
+// print the blocks sequentially once the TUI has closed.
 
+import type { PromptApi } from "@bunli/core";
 import {
     hasMakefile, pkgUnits, printResults, runRule, stowPackages, stowPkg,
-    unstowPkg, unitsOp, whiptailChecklist, type PkgResult,
+    unstowPkg, unitsOp, type PkgResult,
 } from "../lib/pkgops";
+import { tuiChecklist } from "../lib/tui";
 
 export type Op = "stow" | "unstow" | "enable" | "disable";
 
-export async function pkgOpTui(op: Op, explicit: string[]): Promise<void> {
+export async function pkgOpTui(op: Op, explicit: string[], prompt: PromptApi): Promise<void> {
     let pkgs = explicit;
     if (pkgs.length === 0) {
-        if (!process.stdin.isTTY) {
+        if (!process.stdin.isTTY || !process.stdout.isTTY) {
             console.error(`${op}: no packages and no tty`);
             process.exit(2);
         }
-        const sel = whiptailChecklist(`on-deploy ${op}`, "select packages", stowPackages());
+        const sel = await tuiChecklist(prompt, `on-deploy ${op}`, "select packages", stowPackages());
         if (sel === null) {
             console.log(`${op}: cancelled`);
             return;
@@ -48,4 +50,3 @@ export async function pkgOpTui(op: Op, explicit: string[]): Promise<void> {
     printResults(results);
     if (results.some((r) => !r.ok)) process.exit(1);
 }
-

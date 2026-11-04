@@ -17,9 +17,8 @@ import { defineCommand } from "@bunli/core";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { checkDotsEnv, DOTS_DIR } from "../lib/dots";
-import {
-    printResults, runRule, whiptailChecklist, whiptailMenu, type PkgResult,
-} from "../lib/pkgops";
+import { printResults, runRule, type PkgResult } from "../lib/pkgops";
+import { tuiChecklist, tuiMenu } from "../lib/tui";
 
 
 export const STANDARD_RULES = [
@@ -43,7 +42,7 @@ export default defineCommand({
     name: "packages",
     description:
         "Group operations on the stow packages' dependency Makefiles (install/start/stop/uninstall/status/disable/enable); bare = TUI",
-    handler: async ({ positional }) => {
+    handler: async ({ positional, prompt }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
             console.error(`on-deploy: ${env.problem}`);
@@ -56,9 +55,8 @@ export default defineCommand({
         // the Makefiles' output is CAPTURED per package and printed
         // sequentially after the TUI closes
         if (!rule && process.stdin.isTTY) {
-            const pick = whiptailMenu(
-                "on-deploy packages", "rule",
-                [...STANDARD_RULES, "list"],
+            const pick = await tuiMenu(
+                prompt, "on-deploy packages", "rule", [...STANDARD_RULES, "list"],
             );
             if (pick === null) {
                 console.log("packages: cancelled");
@@ -68,8 +66,8 @@ export default defineCommand({
                 console.log(`packages: ${available.join(" ")}`);
                 return;
             }
-            const sel = whiptailChecklist(
-                "on-deploy packages", `packages for '${pick}'`, available, available,
+            const sel = await tuiChecklist(
+                prompt, "on-deploy packages", `packages for '${pick}'`, available, available,
             );
             if (sel === null) {
                 console.log("packages: cancelled");
@@ -93,6 +91,24 @@ export default defineCommand({
             console.log(`packages: ${p}: no Makefile`);
         }
         const targets = wanted.filter((p) => available.includes(p));
+        // mutating rules get a PURPOSE notice BEFORE running: the rule
+        // bodies live in the package Makefiles and may invoke the
+        // platform package manager — sudo prompts need their context
+        // (also: what the package's rule is about to do)
+        if (rule === "install" || rule === "uninstall" || rule === "enable" || rule === "disable" || rule === "start" || rule === "stop") {
+            const what: Record<string, string> = {
+                install: "deploy the package's binary dependencies (its Makefile may invoke the platform package manager — sudo may ask for your password)",
+                uninstall: "remove the package's deployed artifacts",
+                enable: "enable the package's services",
+                disable: "disable the package's services",
+                start: "start the package's services",
+                stop: "stop the package's services",
+            };
+            console.log(
+                `packages: ${rule} on ${targets.join(" ") || "(none)"} — ` +
+                `${what[rule] ?? "run the package's rule"}`,
+            );
+        }
         const results: PkgResult[] = [];
         for (const pkg of targets) {
             results.push(runRule(pkg, rule));

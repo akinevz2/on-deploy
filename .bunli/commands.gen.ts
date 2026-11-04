@@ -114,10 +114,11 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
     },
   'preserve': {
       name: 'preserve',
-      description: 'Resolve stow conflicts for packages before (re)stowing, preserving the user\'s pre-existing files in the XDG state store',
+      description: 'Resolve stow conflicts for packages before (re)stowing — per-file TUI with side-by-side diff, or the archive-first default',
       options: {
         'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print the plan per package, change nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
         'yes': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'assume yes (non-interactive; default is keep)', short: 'y', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'only': { type: 'z.string.optional', required: false, hasDefault: false, description: 'comma/space-separated packages (skips the TUI checklist)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
         'adopt': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'adopt-flow: stow --adopt the pre-existing $HOME files into the repo and report git diff (mine wins)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
         'keep': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'skip the prompt; keep the deployed content', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
         'restore': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'skip the prompt; restore stored user content (or revert to dots in --adopt mode)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },

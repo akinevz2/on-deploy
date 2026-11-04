@@ -16,12 +16,12 @@ export default defineCommand({
             description: "comma/space-separated packages (skips the TUI)",
         }),
     },
-    handler: async ({ flags }) => {
+    handler: async ({ flags, prompt }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
             console.error(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
-        await pkgOpTui("enable", flags.only?.split(/[,\s]+/).filter(Boolean) ?? []);
+        await pkgOpTui("enable", flags.only?.split(/[,\s]+/).filter(Boolean) ?? [], prompt);
     },
 });
