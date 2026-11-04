@@ -3,7 +3,6 @@
 // checklist), run the operation per package (output CAPTURED), then
 // print the blocks sequentially once the TUI has closed.
 
-import type { PromptApi } from "@bunli/core";
 import {
     hasMakefile, pkgUnits, printResults, runRule, stowPackages, stowPkg,
     unstowPkg, unitsOp, type PkgResult,
@@ -12,14 +11,17 @@ import { tuiChecklist } from "../lib/tui";
 
 export type Op = "stow" | "unstow" | "enable" | "disable";
 
-export async function pkgOpTui(op: Op, explicit: string[], prompt: PromptApi): Promise<void> {
+export async function pkgOpTui(op: Op, explicit: string[]): Promise<void> {
     let pkgs = explicit;
     if (pkgs.length === 0) {
         if (!process.stdin.isTTY || !process.stdout.isTTY) {
             console.error(`${op}: no packages and no tty`);
             process.exit(2);
         }
-        const sel = await tuiChecklist(prompt, `on-deploy ${op}`, "select packages", stowPackages());
+        const sel = await tuiChecklist<string>(
+            "select packages",
+            stowPackages().map((p) => ({ label: p, value: p })),
+        );
         if (sel === null) {
             console.log(`${op}: cancelled`);
             return;

@@ -51,7 +51,11 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
 
         if (!yes) {
             const ok = await confirm(`         install ${res.pkg}? [Y/n] `);
-            if (!ok) {
+            if (ok === "abort") {
+                console.error(`         EOF (ctrl-d): stopped — ${binary} unresolved`);
+                process.exit(130);
+            }
+            if (ok === "no") {
                 console.error(`         skipped — ${binary} stays missing`);
                 failed += 1;
                 continue;

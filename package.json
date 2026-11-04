@@ -44,8 +44,5 @@
     "package.json",
     "bunli.config.ts",
     ".bunli/"
-  ],
-  "patchedDependencies": {
-    "@bunli/runtime@0.3.2": "patches/@bunli%2Fruntime@0.3.2.patch"
-  }
+  ]
 }

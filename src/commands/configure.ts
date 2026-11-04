@@ -28,8 +28,10 @@ import {
     packagesWithMakefiles, printResults, runRule, stowPackages, stowPkg,
     type PkgResult,
 } from "../lib/pkgops";
-import type { PromptApi } from "@bunli/core";
-import { tuiText } from "../lib/tui";
+// the interactive layer is OURS (lib/tui*): no facade prompts — the
+// vendored per-prompt listener pattern (MaxListenersExceeded) stays
+// out of dependency land; see lib/tuiSession.tsx
+import { tuiChecklist, tuiSelect, tuiText, tuiYesNo, releaseTui } from "../lib/tui";
 
 const KNOWN_TARGETS = ["ubuntu", "debian", "manjaro", "arch", "fedora"];
 // the candidate catalog for the checklist (the current list is always
@@ -175,13 +177,23 @@ async function promptCredentials(): Promise<{ name: string; email: string } | nu
     console.log("  two lines: your full name (three words), then your email.");
     for (;;) {
         process.stdout.write("  name  (three words, empty=skip): ");
-        const name = (await readLine()).trim();
+        const nameLine = await readLine();
+        if (nameLine === null) {
+            console.log("configure: EOF (ctrl-d) — skipped; git identity stays unset (re-run 'on-deploy configure' later)");
+            return null;
+        }
+        const name = nameLine.trim();
         if (!name) {
             console.log("configure: skipped — git identity stays unset (re-run 'on-deploy configure' later)");
             return null;
         }
         process.stdout.write("  email (empty=skip): ");
-        const email = (await readLine()).trim();
+        const emailLine = await readLine();
+        if (emailLine === null) {
+            console.log("configure: EOF (ctrl-d) — skipped; git identity stays unset (re-run 'on-deploy configure' later)");
+            return null;
+        }
+        const email = emailLine.trim();
         if (!email) {
             console.log("configure: skipped — git identity stays unset (re-run 'on-deploy configure' later)");
             return null;
@@ -197,38 +209,40 @@ async function promptCredentials(): Promise<{ name: string; email: string } | nu
 // The bunli-native menu: opentui-rendered select/multiselect frames
 // inline in the scrollback; every field validates at the prompt; Esc
 // cancels the CURRENT field (the menu stays) or quits at the menu root.
-async function tuiEdit(prompt: PromptApi, m: Manifest): Promise<boolean> {
+type EditResult = "cancel" | "quit" | "saved";
+
+async function tuiEdit(m: Manifest): Promise<EditResult> {
     const cred = readCredentials() as { name: string; email: string; dirty?: boolean };
     let session = readSession();
 
     for (;;) {
-        const a = await prompt.select("configure — what to edit?", {
-            options: [
-                { label: `deploy target:     ${m.target}`, value: "target" },
-                { label: `required binaries: ${m.binaries.join(" ")}`, value: "binaries" },
-                { label: `session model:     ${session || "wsl-systemd (default)"}`, value: "session" },
-                { label: `git credentials:   ${cred.name || "(unset)"} <${cred.email || "none"}>`, value: "credentials" },
-                { label: "save + apply", value: "save" },
-                { label: "quit without saving", value: "quit" },
-            ],
-        });
-        if (prompt.isCancel(a)) {
+        const a = await tuiSelect("configure — what to edit?", [
+            { label: `deploy target:     ${m.target}`, value: "target" },
+            { label: `required binaries: ${m.binaries.join(" ")}`, value: "binaries" },
+            { label: `session model:     ${session || "wsl-systemd (default)"}`, value: "session" },
+            { label: `git credentials:   ${cred.name || "(unset)"} <${cred.email || "none"}>`, value: "credentials" },
+            { label: "save + apply", value: "save" },
+            { label: "quit without saving", value: "quit" },
+        ]);
+        if (a === null) {
+            // esc/ctrl-c at the ROOT = hard cancel (exit code 130 → make stops)
             console.log("configure: cancelled — nothing saved");
-            return false;
+            process.exit(130);
         }
-        if (a === "quit") return false;
+        if (a === "quit") {
+            console.log("configure: quit without saving — nothing changed");
+            return "quit";
+        }
         if (a === "save") break;
 
         if (a === "target") {
-            const t = await prompt.select("deploy target", {
-                options: [
-                    ...KNOWN_TARGETS.map((k) => ({ label: k, value: k })),
-                    { label: "custom name…", value: "__custom" },
-                ],
-            });
-            if (prompt.isCancel(t)) continue;
+            const t = await tuiSelect<string>("deploy target", [
+                ...KNOWN_TARGETS.map((k) => ({ label: k, value: k })),
+                { label: "custom name…", value: "__custom" },
+            ]);
+            if (t === null) continue;
             if (t === "__custom") {
-                const c = await tuiText(prompt, "custom target name", {
+                const c = await tuiText("custom target name", {
                     validate: (v) => /^[a-z][a-z0-9-]*$/i.test(v.trim()) ? undefined : "letters/digits/dash only",
                 });
                 if (c === null || !c.trim()) continue;
@@ -240,15 +254,16 @@ async function tuiEdit(prompt: PromptApi, m: Manifest): Promise<boolean> {
         }
         if (a === "binaries") {
             const known = [...new Set([...CATALOG, ...m.binaries])];
-            const sel = await prompt.multiselect("required binaries — space toggles, enter confirms", {
-                options: known.map((b) => ({
+            const sel = await tuiChecklist<string>(
+                "required binaries — space toggles, enter confirms",
+                known.map((b) => ({
                     label: b,
                     value: b,
                     hint: CATALOG.includes(b) ? "catalog" : "extra",
                 })),
-                initialValues: m.binaries,
-            });
-            if (prompt.isCancel(sel)) continue;
+                { preselect: m.binaries },
+            );
+            if (sel === null) continue;
             // keep the manifest order stable: known-list order, then
             // anything not listed (defensive)
             m.binaries = known.filter((b) => sel.includes(b));
@@ -257,21 +272,21 @@ async function tuiEdit(prompt: PromptApi, m: Manifest): Promise<boolean> {
             continue;
         }
         if (a === "session") {
-            const s = await prompt.select("deployment model — how the graphical session starts", {
-                options: SESSIONS.map((k) => ({ label: k, value: k })),
-                default: SESSIONS.includes(session) ? session : undefined,
-            });
-            if (prompt.isCancel(s)) continue;
+            const s = await tuiSelect<string>("deployment model — how the graphical session starts",
+                SESSIONS.map((k) => ({ label: k, value: k })),
+                { initialValue: SESSIONS.includes(session) ? session : undefined },
+            );
+            if (s === null) continue;
             session = s;
             continue;
         }
         if (a === "credentials") {
-            const n = await tuiText(prompt, `git user name (three words) [${cred.name}]`, {
+            const n = await tuiText(`git user name (three words) [${cred.name}]`, {
                 validate: (v) => v.trim().split(/\s+/).filter(Boolean).length !== 3
                     ? "exactly three words required" : undefined,
             });
             if (n === null) continue;
-            const e = await tuiText(prompt, `git user email [${cred.email}]`, {
+            const e = await tuiText(`git user email [${cred.email}]`, {
                 validate: (v) => v.includes("@") ? undefined : "'@' required",
             });
             if (e === null) continue;
@@ -287,7 +302,7 @@ async function tuiEdit(prompt: PromptApi, m: Manifest): Promise<boolean> {
             console.log(`configure: ${note}`);
         }
     }
-    return true;
+    return "saved";
 }
 
 export default defineCommand({
@@ -320,7 +335,7 @@ export default defineCommand({
             description: "save nothing; print what the folded apply would run",
         }),
     },
-    handler: async ({ flags, prompt }) => {
+    handler: async ({ flags }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
             console.error(`on-deploy: ${env.problem}`);
@@ -386,19 +401,34 @@ export default defineCommand({
                 console.log("configure: non-interactive — keeping the recorded configuration; applying it");
             }
             if (ttyMenu) {
-                const saved = await tuiEdit(prompt, m);
-                if (!saved) {
-                    console.log("configure: quit — nothing deployed");
+                const saved = await tuiEdit(m);
+                if (saved !== "saved") {
+                    // quit: the manifest stays as recorded and NOTHING is
+                    // applied (the explicit "quit without saving" menu pick;
+                    // re-run deploy to deploy an older recorded config)
+                    console.log("configure: quit — recorded configuration kept");
                     return;
                 }
                 // the WIZARD: the saved configuration now drives the full
                 // deployment — binaries from the repos, each package's
                 // install rule, stow, then the deploy target apply.
-                const go = await prompt.confirm(
+                const go = await tuiYesNo(
                     "run the full deployment now? (install + package rules + stow + apply)",
-                    { default: true },
+                    { initialValue: true },
                 );
+                if (go === null) {
+                    // esc/ctrl-c at the wizard gate: hard cancel
+                    console.log("configure: cancelled after save — deployment stopped");
+                    process.exit(130);
+                }
+                if (!go) {
+                    console.log("configure: saved (deployment skipped — re-run 'make install' to deploy)");
+                    return;
+                }
                 if (go) {
+                    // the wizard's install confirms + sudo are LINE-READER
+                    // flows; the raw-mode TUI session must step down first
+                    await releaseTui();
                     console.log("wizard: binaries");
                     const failed = await walk(false, false);
                     if (failed > 0) {

@@ -18,7 +18,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { checkDotsEnv, DOTS_DIR } from "../lib/dots";
 import { printResults, runRule, type PkgResult } from "../lib/pkgops";
-import { tuiChecklist, tuiMenu } from "../lib/tui";
+import { tuiChecklist, tuiSelect } from "../lib/tui";
 
 
 export const STANDARD_RULES = [
@@ -42,7 +42,7 @@ export default defineCommand({
     name: "packages",
     description:
         "Group operations on the stow packages' dependency Makefiles (install/start/stop/uninstall/status/disable/enable); bare = TUI",
-    handler: async ({ positional, prompt }) => {
+    handler: async ({ positional }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
             console.error(`on-deploy: ${env.problem}`);
@@ -55,8 +55,11 @@ export default defineCommand({
         // the Makefiles' output is CAPTURED per package and printed
         // sequentially after the TUI closes
         if (!rule && process.stdin.isTTY) {
-            const pick = await tuiMenu(
-                prompt, "on-deploy packages", "rule", [...STANDARD_RULES, "list"],
+            const pick = await tuiSelect<string>(
+                "rule", [...STANDARD_RULES, "list"].map((r) => ({
+                    label: r === "list" ? "list — print packages with Makefiles" : r,
+                    value: r,
+                })),
             );
             if (pick === null) {
                 console.log("packages: cancelled");
@@ -66,8 +69,10 @@ export default defineCommand({
                 console.log(`packages: ${available.join(" ")}`);
                 return;
             }
-            const sel = await tuiChecklist(
-                prompt, "on-deploy packages", `packages for '${pick}'`, available, available,
+            const sel = await tuiChecklist<string>(
+                `packages for '${pick}'`,
+                available.map((p) => ({ label: p, value: p })),
+                { preselect: available },
             );
             if (sel === null) {
                 console.log("packages: cancelled");

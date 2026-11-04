@@ -4,24 +4,39 @@
 // closes. This reader keeps an explicit line queue, so it is correct
 // for interactive keystrokes AND burst-piped feeds (each queued read
 // consumes the next buffered line; EOF resolves every pending read
-// with "").
+// with null AFTER the trailing unterminated line — delivered only now,
+// when the terminal flushes it).
+//
+// SIGNAL CONTRACT (const): readLine() resolves null on EOF — the
+// terminal's ctrl-d at an empty line (canonical mode) or a closed
+// stdin. Callers MUST branch on null: confirm() maps EOF to "abort",
+// never an implicit yes (the old reader's empty-string resolution made
+// "install?" treat ctrl-d as a YES — the "signals resume the script"
+// bug).
 
 const pending: string[] = [];
-let resolvers: ((line: string) => void)[] = [];
+let resolvers: ((line: string | null) => void)[] = [];
 let eof = false;
 let attached = false;
 const dec = new TextDecoder();
+/** an unterminated final line, delivered at EOF (canonical flush) */
+let trailing: string | null = null;
 
-function deliver(line: string): void {
+function deliver(line: string | null): void {
     const r = resolvers.shift();
     if (r) r(line);
-    else pending.push(line);
+    else if (line !== null) pending.push(line);
 }
 
 function flushEof(): void {
     if (eof) return;
     eof = true;
-    while (resolvers.length > 0) (resolvers.shift() as (l: string) => void)("");
+    if (trailing !== null) {
+        const t = trailing;
+        trailing = null;
+        deliver(t);
+    }
+    while (resolvers.length > 0) (resolvers.shift() as (l: string | null) => void)(null);
 }
 
 function attach(): void {
@@ -33,28 +48,41 @@ function attach(): void {
             buf = buf.slice(i + 1);
             i = buf.indexOf("\n");
         }
-        // a trailing line without its newline: deliver it ONLY at EOF
-        // (interactive terminals flush it on Enter via the \n; a burst
-        // feed's last unterminated line is ambiguous)
+        // a trailing line without its newline: buffered; delivered ONLY
+        // at EOF (interactive terminals flush it on Enter via the \n)
+        trailing = buf.length > 0 ? buf : trailing;
     });
     process.stdin.once("end", flushEof);
     process.stdin.once("close", flushEof);
 }
 
-/** resolve with the next line ("" on EOF when no line remains) */
-export function readLine(): Promise<string> {
+/** resolve with the next line, or null at EOF (terminal ctrl-d /
+ *  closed stdin). The null branch must abort, never assume. */
+export function readLine(): Promise<string | null> {
     if (!attached) {
         attached = true;
         attach();
     }
     if (pending.length > 0) return Promise.resolve(pending.shift()!);
-    if (eof) return Promise.resolve("");
-    return new Promise((resolve) => resolvers.push(resolve));
+    if (eof) return Promise.resolve(null);
+    return new Promise<string | null>((resolve) => resolvers.push(resolve));
 }
 
-/** confirmation prompt: [Y/n] semantics — Enter accepts */
-export async function confirm(prompt: string): Promise<boolean> {
+/** [Y/n] semantics — Enter accepts. EOF (ctrl-d / closed stdin) →
+ *  "abort": the caller must STOP instead of continuing silently. */
+export async function confirm(prompt: string): Promise<"yes" | "no" | "abort"> {
     process.stdout.write(prompt);
-    const a = (await readLine()).trim().toLowerCase();
-    return a === "" || a === "y" || a === "yes";
+    const a = await readLine();
+    if (a === null) return "abort";
+    const t = a.trim().toLowerCase();
+    if (t === "" || t === "y" || t === "yes") return "yes";
+    return "no";
+}
+
+/** non-null line read: retries past the EOF case with a message (for
+ *  prompts where skipping is NOT an option). Loop-safe on EOF? No —
+ *  returns null when stdin is over; callers exit. */
+export async function readLineRequired(prompt: string): Promise<string | null> {
+    process.stdout.write(prompt);
+    return await readLine();
 }

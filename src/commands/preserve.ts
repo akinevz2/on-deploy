@@ -39,7 +39,7 @@ import { stowPackages } from "../lib/pkgops";
 import { confirm } from "../lib/lines";
 import { preservePackage, scanConflicts, type Conflict, type PreserveOptions } from "../lib/preserve";
 import { showDiffView } from "../lib/diffview";
-import type { PromptApi } from "@bunli/core";
+import { tuiChecklist, tuiSelect } from "../lib/tui";
 
 /** the unified diff text (git diff --no-index, exit code 1 = DIFFERS) */
 function unifiedDiff(repoPath: string, homePath: string): string[] {
@@ -73,7 +73,7 @@ function diffViews(repoPath: string, homePath: string) {
 }
 
 /** interactive conflict resolution — per package, per file */
-async function resolveInteractive(prompt: PromptApi, pkgs: string[], opts: PreserveOptions): Promise<number> {
+async function resolveInteractive(pkgs: string[], opts: PreserveOptions): Promise<number> {
     const known = stowPackages();
     const unknown = pkgs.filter((p) => !known.includes(p));
     for (const p of unknown) console.log(`preserve: not a dots package: ${p}`);
@@ -101,20 +101,18 @@ async function resolveInteractive(prompt: PromptApi, pkgs: string[], opts: Prese
     if (groups.length === 0) return 0;
 
     // 2. package-level checklist
-    const chosen = await prompt.multiselect(
-        "preserve — packages with conflicts; select the ones to resolve now (a/enter all):",
-        {
-            options: groups.map((g) => ({
-                label: g.pkg,
-                value: g.pkg,
-                hint: g.hard.length > 0
-                    ? `${g.hard.length} HARD (directories; skip and fix by hand)`
-                    : `${g.conflicts.length} file(s)`,
-            })),
-            initialValues: groups.map((g) => g.pkg),
-        },
+    const chosen = await tuiChecklist<string>(
+        "preserve — packages with conflicts; select the ones to resolve now:",
+        groups.map((g) => ({
+            label: g.pkg,
+            value: g.pkg,
+            hint: g.hard.length > 0
+                ? `${g.hard.length} HARD (directories; skip and fix by hand)`
+                : `${g.conflicts.length} file(s)`,
+        })),
+        { preselect: groups.map((g) => g.pkg) },
     );
-    if (prompt.isCancel(chosen)) {
+    if (chosen === null) {
         console.log("preserve: cancelled — nothing staged; deploying the clean packages only");
         return worst;
     }
@@ -138,16 +136,14 @@ async function resolveInteractive(prompt: PromptApi, pkgs: string[], opts: Prese
             let viewer: { side: { left: string; right: string }[]; unified: string[] } | null = null;
             const repoPath = join(DOTS_DIR, pkg, c.rel);
             for (;;) {
-                const a = await prompt.select(`${c.rel} (${kind}) — resolve how?`, {
-                    options: [
-                        { label: "keep the DOTS version (mine goes to the XDG store)", value: "dots", hint: "default (enter)" },
-                        { label: "adopt MY version into the repo (deploy keeps using it)", value: "mine" },
-                        { label: "view side-by-side diff (full screen)", value: "side" },
-                        { label: "view inline diff", value: "inline" },
-                        { label: "cancel — skip this file and the rest of the package", value: "cancel" },
-                    ],
-                });
-                if (prompt.isCancel(a)) break; // cancel: skip the whole package
+                const a = await tuiSelect<string>(`${c.rel} (${kind}) — resolve how?`, [
+                    { label: "keep the DOTS version (mine goes to the XDG store)", value: "dots", hint: "default (enter)" },
+                    { label: "adopt MY version into the repo (deploy keeps using it)", value: "mine" },
+                    { label: "view side-by-side diff (full screen)", value: "side" },
+                    { label: "view inline diff", value: "inline" },
+                    { label: "cancel — skip this file and the rest of the package", value: "cancel" },
+                ]);
+                if (a === null) break; // cancel: skip the whole package
                 if (a === "side" || a === "inline") {
                     if (!viewer) viewer = diffViews(repoPath, c.homePath);
                     try {
@@ -157,7 +153,7 @@ async function resolveInteractive(prompt: PromptApi, pkgs: string[], opts: Prese
                         console.log(
                             `--- ${c.rel}\n${viewer.unified.join("\n")}`,
                         );
-                        await prompt.note(`diff rendering failed (${(err as Error).message}); unified diff printed above`);
+                        console.log(`preserve: diff rendering failed (${(err as Error).message}); unified diff printed above`);
                     }
                     continue; // decision loop resumes
                 }
@@ -205,7 +201,7 @@ export default defineCommand({
             description: "override the store root (default ~/.local/state/doftiles/preserve)",
         }),
     },
-    handler: async ({ flags, positional, prompt }) => {
+    handler: async ({ flags, positional }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
             console.error(`on-deploy: ${env.problem}`);
@@ -221,12 +217,13 @@ export default defineCommand({
                 process.exit(2);
             }
             const all = stowPackages();
-            const sel = await prompt.multiselect("preserve — select packages", {
-                options: all.map((l) => ({ label: l, value: l })),
-            });
-            if (prompt.isCancel(sel)) {
+            const sel = await tuiChecklist<string>(
+                "preserve — select packages",
+                all.map((l) => ({ label: l, value: l })),
+            );
+            if (sel === null) {
                 console.log("preserve: cancelled");
-                return;
+                process.exit(130);
             }
             pkgs = sel;
         }
@@ -248,7 +245,7 @@ export default defineCommand({
             !flags.yes && !flags.keep && !flags.restore && !flags.adopt && !flags["dry-run"];
         let worst = 0;
         if (interactive) {
-            worst = await resolveInteractive(prompt, pkgs, opts);
+            worst = await resolveInteractive(pkgs, opts);
             process.exit(worst);
         }
         console.log(
@@ -268,9 +265,14 @@ export default defineCommand({
             const result = await preservePackage(pkg, opts, {
                 ask: async () => {
                     if (!isTTY) return false; // default: keep
-                    return await confirm(
+                    const ok = await confirm(
                         `preserve ${pkg}: restore your stored files over the deployed version? [y/N] `,
-                    ) as unknown as boolean;
+                    );
+                    if (ok === "abort") {
+                        console.error("preserve: EOF (ctrl-d) — stopped");
+                        process.exit(130);
+                    }
+                    return ok === "yes";
                 },
             }, DOTS_DIR);
             for (const l of result.lines) console.log(l);

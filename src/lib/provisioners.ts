@@ -126,7 +126,11 @@ export async function ensureVcxsrv(
     }
     if (!yes) {
         const ok = await confirm(`  download + silently install VcXsrv from\n    ${url}\n  proceed? [y/N] `);
-        if (!ok) return { name: "vcxsrv", ok: false, detail: "declined", problem: "declined" };
+        if (ok === "abort") {
+            console.error("  EOF (ctrl-d): provision stopped");
+            process.exit(130);
+        }
+        if (ok !== "yes") return { name: "vcxsrv", ok: false, detail: "declined", problem: "declined" };
     }
     const tmp = "/mnt/c/Users/Public/Downloads/VcXsrv-setup.exe";
     const dl = Bun.spawnSync(["curl", "-fsSL", "-o", tmp, url]);
