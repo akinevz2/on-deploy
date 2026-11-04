@@ -20,7 +20,7 @@
 import { describe, expect, test } from "bun:test";
 import { createTestRenderer } from "@opentui/core/testing";
 import { useKeyboard, createRoot as realCreateRoot } from "@opentui/react";
-import { __openTuiSessionInternalsForTests } from "../node_modules/@bunli/runtime/src/prompt/runtime/open-tui-session.tsx";
+import { __openTuiSessionInternalsForTests } from "@bunli/runtime/src/prompt/runtime/open-tui-session";
 import { createElement } from "react";
 
 // a minimal REAL component (the runtime's own views are the same shape)
