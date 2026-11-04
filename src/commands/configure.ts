@@ -43,6 +43,8 @@ const CATALOG = [
 interface Manifest {
     comments: string[];
     binaries: string[];
+    /** the positional session line (line 2 of the content; "" when absent) */
+    session: string;
     target: string;
 }
 
@@ -54,16 +56,28 @@ function readManifest(): Manifest {
         throw new Error("wm.requires: expected a binaries line and a target line");
     }
     const comments = all.slice(0, all.indexOf(content[0]));
+    // positional layout: [binaries] [session?] [target]
+    // readSession() defines line 2 = the session; target is the LAST line
+    const target = content[content.length - 1].trim();
+    const session = content.length >= 3 ? content[1].trim() : "";
     return {
         comments,
         binaries: content[0].trim().split(/\s+/).filter(Boolean),
-        target: content[content.length - 1].trim(),
+        session,
+        target,
     };
 }
 
 function writeManifest(m: Manifest): void {
-    const body = [...m.comments, m.binaries.join(" "), m.target];
-    writeFileSync(join(DOTS_DIR, "wm.requires"), body.join("\n") + "\n");
+    // the manifest layout is POSITIONAL (the session line has no key):
+    // [comments...] binaries session(target) — rewriting must keep the
+    // middle line (writeSession reads it positionally too), else the
+    // saved manifest silently loses the deployment model
+    if (m.session || readSession()) writeSession(m.session);
+    writeFileSync(
+        join(DOTS_DIR, "wm.requires"),
+        [...m.comments, m.binaries.join(" "), m.session, m.target].join("\n") + "\n",
+    );
 }
 
 // --- the deployment model (the `session =` line of wm.requires) ------------
