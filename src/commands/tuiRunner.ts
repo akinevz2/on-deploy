@@ -40,6 +40,20 @@ export async function pkgOpTui(op: Op, explicit: string[]): Promise<void> {
     for (const p of unknown) console.log(`${op}: not a dots package: ${p}`);
     const targets = pkgs.filter((p) => known.includes(p));
 
+    // self-demolition guard: an implicitly-selected unstow must never
+    // remove the on-deploy package itself — it owns the running binary
+    // (the recovery flow calls unstow and then needs on-deploy again;
+    // with the package gone the next invocation dies with ENOENT).
+    // An EXPLICIT selection is honored: unstowing on-deploy on purpose
+    // is the user's call.
+    if (op === "unstow" && explicit.length === 0) {
+        const selfIndex = targets.indexOf("on-deploy");
+        if (selfIndex >= 0) {
+            targets.splice(selfIndex, 1);
+            console.log("unstow: skipping on-deploy — it owns the running binary (list it explicitly to really unstow it)");
+        }
+    }
+
     const results: PkgResult[] = [];
     for (const pkg of targets) {
         if (op === "stow") { results.push(stowPkg(pkg)); continue; }
