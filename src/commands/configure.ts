@@ -210,7 +210,7 @@ function writeCredentials(name: string, email: string): string[] {
 
 function validCredentials(name: string, email: string): string {
     const words = name.trim().split(/\s+/).filter(Boolean);
-    if (words.length !== 3) return "name: exactly three words required";
+    if (words.length === 0) return "name: empty";
     if (!email.includes("@")) return "email: '@' required";
     return "";
 }
@@ -228,9 +228,9 @@ async function promptCredentials(): Promise<{ name: string; email: string } | nu
     if (!process.stdin.isTTY) return null;
     console.log("configure: no git credentials on file (~/.my-credentials missing)");
     console.log("  the shell rc files load git identity from that file at startup —");
-    console.log("  two lines: your full name (three words), then your email.");
+    console.log("  two lines: your full name, then your email.");
     for (;;) {
-        process.stdout.write("  name  (three words, empty=skip): ");
+        process.stdout.write("  name  (empty=skip): ");
         const nameLine = await readLine();
         if (nameLine === null) {
             console.log("configure: EOF (ctrl-d) — skipped; git identity stays unset (re-run 'on-deploy configure' later)");
@@ -386,9 +386,9 @@ async function tuiEdit(m: Manifest): Promise<EditResult> {
             continue;
         }
         if (a === "credentials") {
-            const n = await tuiText(`git user name (three words) [${cred.name}]`, {
-                validate: (v) => v.trim().split(/\s+/).filter(Boolean).length !== 3
-                    ? "exactly three words required" : undefined,
+            const n = await tuiText(`git user name [${cred.name}]`, {
+                validate: (v) => v.trim().split(/\s+/).filter(Boolean).length === 0
+                    ? "empty" : undefined,
             });
             if (n === null) continue;
             const e = await tuiText(`git user email [${cred.email}]`, {
@@ -440,7 +440,7 @@ export default defineCommand({
             description: `deployment model session (${SESSIONS.join("|")})`,
         }),
         name: option(z.string().optional(), {
-            description: "git user name (three words; stored in dots/shell/.my-credentials)",
+            description: "git user name (stored in dots/shell/.my-credentials)",
         }),
         email: option(z.string().optional(), {
             description: "git user email (stored in dots/shell/.my-credentials)",
