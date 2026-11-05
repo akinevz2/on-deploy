@@ -26,7 +26,7 @@ export default defineCommand({
     description:
         "Run service.order units: check|start|stop|restart|status (systemd --user, --no-block, stow-safe disable)",
     options: {
-        yes: option(z.boolean().optional(), {
+        yes: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "no confirmation (non-interactive)",
             short: "y",
         }),

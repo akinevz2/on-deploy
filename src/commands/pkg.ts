@@ -25,11 +25,11 @@ export default defineCommand({
     description:
         "Generic package operations on the given names (installed|search|install|remove) via the deploy target package manager",
     options: {
-        yes: option(z.boolean().optional(), {
+        yes: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "no confirmations (non-interactive)",
             short: "y",
         }),
-        "dry-run": option(z.boolean().optional(), {
+        "dry-run": option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "print what would run",
         }),
     },

@@ -1,6 +1,6 @@
 {
   "name": "on-deploy",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Rigorous dotfiles requirement deployer — reads wm.requires, verifies each binary, installs the missing ones via the platform deploy script",
   "type": "module",
   "bin": {

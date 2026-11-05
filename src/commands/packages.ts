@@ -1,5 +1,7 @@
 // src/commands/packages.ts — GROUP OPERATIONS over the stow packages'
-// dependency Makefiles (dots/<pkg>/.local/share/<pkg>/Makefile).
+// dependency Makefiles (the depends scheme
+// dots/<pkg>/.local/state/depends/<pkg>.Makefile, with the legacy
+// dots/<pkg>/.local/share/<pkg>/Makefile hook as fallback).
 //
 //   on-deploy packages <rule> [pkg...]     run a rule on some packages
 //   on-deploy packages <rule>              run it on EVERY package
@@ -25,12 +27,16 @@ export const STANDARD_RULES = [
     "install", "start", "stop", "uninstall", "status", "disable", "enable",
 ] as const;
 
-/** every package that ships a dependency Makefile */
+/** every package that ships a dependency Makefile (the depends scheme
+ *  dots/<pkg>/.local/state/depends/<pkg>.Makefile preferred; the legacy
+ *  dots/<pkg>/.local/share/<pkg>/Makefile hook as fallback) */
 export function packagesWithMakefiles(dots: string): string[] {
     const out: string[] = [];
     for (const name of readdirSync(dots, { withFileTypes: true })) {
         if (!name.isDirectory() || name.name.startsWith(".") || name.name === "defaults") continue;
-        if (existsSync(join(dots, name.name, ".local", "share", name.name, "Makefile"))) {
+        const stateFile = join(dots, name.name, ".local", "state", "depends", `${name.name}.Makefile`);
+        const shareFile = join(dots, name.name, ".local", "share", name.name, "Makefile");
+        if (existsSync(stateFile) || existsSync(shareFile)) {
             out.push(name.name);
         }
     }

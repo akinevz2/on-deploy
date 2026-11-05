@@ -331,10 +331,10 @@ export default defineCommand({
         email: option(z.string().optional(), {
             description: "git user email (stored in dots/shell/.my-credentials)",
         }),
-        show: option(z.boolean().optional(), {
+        show: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "print the current configuration",
         }),
-        "dry-run": option(z.boolean().optional(), {
+        "dry-run": option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "save nothing; print what the folded apply would run",
         }),
     },

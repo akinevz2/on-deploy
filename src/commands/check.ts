@@ -51,7 +51,7 @@ export default defineCommand({
     name: "check",
     description: "Verify environment + requirements; install nothing",
     options: {
-        json: option(z.boolean().optional(), { description: "machine-readable output" }),
+        json: option(z.boolean().optional(), { argumentKind: "flag" as const, description: "machine-readable output" }),
     },
     handler: async ({ flags }) => {
         const env = checkDotsEnv();

@@ -16,7 +16,7 @@ export default defineCommand({
     description:
         "Back up the current (not dots-owned) $HOME files of a stow package into ~/dots/defaults/",
     options: {
-        "dry-run": option(z.boolean().optional(), {
+        "dry-run": option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "list what would be collected, copy nothing",
         }),
     },

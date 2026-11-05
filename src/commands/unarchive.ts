@@ -15,7 +15,7 @@ export default defineCommand({
     description:
         "Restore a stow package's defaults/ backups into $HOME (skips dots-owned paths)",
     options: {
-        "dry-run": option(z.boolean().optional(), {
+        "dry-run": option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "list what would be restored, copy nothing",
         }),
     },

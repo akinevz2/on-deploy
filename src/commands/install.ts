@@ -84,11 +84,11 @@ export default defineCommand({
     description:
         "Install missing required binaries from the target repositories (search + install + re-verify)",
     options: {
-        yes: option(z.boolean().optional(), {
+        yes: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "install without confirmation (non-interactive)",
             short: "y",
         }),
-        "dry-run": option(z.boolean().optional(), {
+        "dry-run": option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "resolve + report, run nothing",
         }),
         only: option(z.string().optional(), {

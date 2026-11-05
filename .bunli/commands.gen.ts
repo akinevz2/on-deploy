@@ -7,6 +7,7 @@ import { createGeneratedHelpers, registerGeneratedStore } from '@bunli/core'
 import Archive from '../src/commands/archive.js'
 import Check from '../src/commands/check.js'
 import Configure from '../src/commands/configure.js'
+import Depends from '../src/commands/depends.js'
 import Disable from '../src/commands/disable.js'
 import Enable from '../src/commands/enable.js'
 import Install from '../src/commands/install.js'
@@ -16,17 +17,19 @@ import Preserve from '../src/commands/preserve.js'
 import Search from '../src/commands/search.js'
 import Services from '../src/commands/services.js'
 import Stow from '../src/commands/stow.js'
+import Toolchain from '../src/commands/toolchain.js'
 import Unarchive from '../src/commands/unarchive.js'
 import Unstow from '../src/commands/unstow.js'
 
 // Narrow list of command names to avoid typeof-cycles in types
-const names = ['archive', 'check', 'configure', 'disable', 'enable', 'install', 'packages', 'pkg', 'preserve', 'search', 'services', 'stow', 'unarchive', 'unstow'] as const
+const names = ['archive', 'check', 'configure', 'depends', 'disable', 'enable', 'install', 'packages', 'pkg', 'preserve', 'search', 'services', 'stow', 'toolchain', 'unarchive', 'unstow'] as const
 type GeneratedNames = typeof names[number]
 
 const modules: Record<GeneratedNames, Command<any>> = {
   'archive': Archive,
   'check': Check,
   'configure': Configure,
+  'depends': Depends,
   'disable': Disable,
   'enable': Enable,
   'install': Install,
@@ -36,6 +39,7 @@ const modules: Record<GeneratedNames, Command<any>> = {
   'search': Search,
   'services': Services,
   'stow': Stow,
+  'toolchain': Toolchain,
   'unarchive': Unarchive,
   'unstow': Unstow
 } as const
@@ -71,6 +75,19 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
         'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'save nothing; print what the folded apply would run', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
       },
       path: './src/commands/configure'
+    },
+  'depends': {
+      name: 'depends',
+      description: 'Sync the dots submodules and run the per-package depends Makefiles (--build/--install depth); bare = discovery report',
+      options: {
+        'build': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'sync + run each package\'s Makefile `build` rule (toolchain + compile, no install)', short: 'b', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'install': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'sync + run each package\'s Makefile `install` rule (build + deploy)', short: 'i', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'force': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'pass FORCE=1 to the Makefiles (redeploy even when installed)', short: 'f', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'only': { type: 'z.string.optional', required: false, hasDefault: false, description: 'comma/space-separated subset of packages to drive', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'no-sync': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'run only the Makefile rules — skip the git submodule phase', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'report what would run, change nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+      },
+      path: './src/commands/depends'
     },
   'disable': {
       name: 'disable',
@@ -150,6 +167,18 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
         'only': { type: 'z.string.optional', required: false, hasDefault: false, description: 'comma/space-separated packages (skips the TUI)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
       },
       path: './src/commands/stow'
+    },
+  'toolchain': {
+      name: 'toolchain',
+      description: 'Install/verify a language toolchain the per-package Makefiles build with (--bun | --rustup); --check fail-fasts',
+      options: {
+        'bun': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'ensure the bun toolchain (bunli/bun builds)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'rustup': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'ensure the rust toolchain manager (rustc/cargo via rustup)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'check': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'verify only — absent toolchain fails fast, installs NOTHING', short: 'c', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'yes': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'no confirmations (non-interactive)', short: 'y', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'resolve + report, run nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+      },
+      path: './src/commands/toolchain'
     },
   'unarchive': {
       name: 'unarchive',

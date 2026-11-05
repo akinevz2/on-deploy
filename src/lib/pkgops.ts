@@ -24,8 +24,64 @@ export function stowPackages(): string[] {
     return out.sort();
 }
 
+/**
+ * the per-package dependency Makefile, at the 2026-11 depends scheme:
+ *   dots/<pkg>/.local/state/depends/<pkg>.Makefile   (the stow package
+ *     hosts its submodules' build/link/install recipes; run with -f)
+ * or, as a fallback for packages NOT yet migrated (e.g. polybar's
+ * bar-control Makefile), the legacy hook directory:
+ *   dots/<pkg>/.local/share/<pkg>/Makefile
+ * Returns { dir, file } where dir is the `make -C` cwd and file the
+ * repo-relative makefile to run.
+ */
+export function pkgMakefile(pkg: string): { dir: string; file: string } | null {
+    const dir = join(DOTS, pkg);
+    const stateFile = join(dir, ".local", "state", "depends", `${pkg}.Makefile`);
+    if (existsSync(stateFile)) {
+        return { dir, file: join(".local", "state", "depends", `${pkg}.Makefile`) };
+    }
+    const shareDir = join(dir, ".local", "share", pkg);
+    if (existsSync(join(shareDir, "Makefile"))) {
+        return { dir: shareDir, file: "Makefile" };
+    }
+    return null;
+}
+
 export function hasMakefile(pkg: string): boolean {
-    return existsSync(join(DOTS, pkg, ".local", "share", pkg, "Makefile"));
+    return pkgMakefile(pkg) !== null;
+}
+
+/** the depends-scheme Makefile of a package (the per-submodule
+ *  sync/build/link/install recipes on-deploy `depends` drives) —
+ *  dots/<pkg>/.local/state/depends/<pkg>.Makefile, or null */
+export function depsMakefile(pkg: string): string | null {
+    const file = join(DOTS, pkg, ".local", "state", "depends", `${pkg}.Makefile`);
+    return existsSync(file) ? file : null;
+}
+
+/** every package that ships the depends-scheme Makefile */
+export function packagesWithDepsMakefiles(): string[] {
+    const out: string[] = [];
+    for (const e of readdirSync(DOTS, { withFileTypes: true })) {
+        if (!e.isDirectory() || e.name.startsWith(".")) continue;
+        if (depsMakefile(e.name)) out.push(e.name);
+    }
+    return out.sort();
+}
+
+/** submodule paths of the repo (.gitmodules), mapped to the stow
+ *  package that owns each (the first path segment) */
+export function submodulesByPackage(): Record<string, string[]> {
+    const gitmodules = join(DOTS, ".gitmodules");
+    if (!existsSync(gitmodules)) return {};
+    const out: Record<string, string[]> = {};
+    for (const line of readFileSync(gitmodules, "utf8").split("\n")) {
+        const m = /^[\t ]*path = (.+)$/.exec(line.trim());
+        if (!m) continue;
+        const pkg = m[1].split("/")[0];
+        (out[pkg] ??= []).push(m[1]);
+    }
+    return out;
 }
 
 export interface PkgResult {
@@ -92,12 +148,16 @@ export function unitsOp(pkg: string, op: "enable" | "disable"): PkgResult {
     return { pkg, ok, lines };
 }
 
-/** run a Makefile rule of one package, output CAPTURED */
+/** run a Makefile rule of one package, output CAPTURED. The Makefile
+ *  is resolved by pkgMakefile (depends scheme -f, else the legacy
+ *  hook directory). */
 export function runRule(pkg: string, rule: string): PkgResult {
-    const dir = join(DOTS, pkg, ".local", "share", pkg);
-    const p = Bun.spawnSync(["make", "-C", dir, "--no-print-directory", rule], {
-        cwd: DOTS, stdout: "pipe", stderr: "pipe",
-    });
+    const mf = pkgMakefile(pkg);
+    if (!mf) return { pkg, ok: false, lines: ["no Makefile"] };
+    const p = Bun.spawnSync(
+        ["make", "-C", mf.dir, "--no-print-directory", "-f", mf.file, rule],
+        { cwd: DOTS, stdout: "pipe", stderr: "pipe" },
+    );
     const lines = [
         ...`${p.stdout ?? ""}`.trim().split("\n").filter(Boolean),
         ...`${p.stderr ?? ""}`.trim().split("\n").filter(Boolean),
@@ -113,14 +173,13 @@ export function printResults(results: PkgResult[]): void {
     }
 }
 
-/** packages that ship a dependency Makefile (dots/<pkg>/.local/share/<pkg>/Makefile) */
+/** packages that ship a dependency Makefile (the depends scheme
+ *  preferred, the legacy hook directory as fallback) */
 export function packagesWithMakefiles(): string[] {
     const out: string[] = [];
     for (const e of readdirSync(DOTS, { withFileTypes: true })) {
         if (!e.isDirectory() || e.name.startsWith(".")) continue;
-        if (existsSync(join(DOTS, e.name, ".local", "share", e.name, "Makefile"))) {
-            out.push(e.name);
-        }
+        if (hasMakefile(e.name)) out.push(e.name);
     }
     return out.sort();
 }

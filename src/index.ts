@@ -7,9 +7,16 @@
 // help on empty argv).
 //
 // `apply` was FOLDED into `configure` (configure applies itself);
-// `toolchain` + `deps` MOVED OUT to the depends stow package
-// (depends/.local/bin/components — installing components is a package
-// concern, and herbctl/polyframes builds do not belong in on-deploy).
+// `deps` was REMOVED in favor of the depends verb (see below), and
+// `toolchain` CAME BACK as a language-toolchain verb (system-level
+// bun/rustup management) — the per-package Makefiles call it; the
+// builds themselves stay in the Makefiles.
+//
+// NEW (2026-11):
+//   toolchain — language toolchains (--bun/--rustup; --check fail-fast)
+//   depends   — sync the dots submodules + drive the per-package
+//               dots/<pkg>/.local/state/depends/<pkg>.Makefile rules
+//               (build/install depth).
 
 import { createCLI } from "@bunli/core";
 import installCommand, { walk } from "./commands/install";
@@ -26,6 +33,8 @@ import unarchiveCommand from "./commands/unarchive";
 import packagesCommand from "./commands/packages";
 import preserveCommand from "./commands/preserve";
 import servicesCommand from "./commands/services";
+import toolchainCommand from "./commands/toolchain";
+import dependsCommand from "./commands/depends";
 
 const argv = process.argv.slice(2);
 if (argv.length === 0) {
@@ -45,7 +54,7 @@ if (compiled) process.chdir("/");
 
 const cli = await createCLI({
     name: "on-deploy",
-    version: "1.1.0",
+    version: "1.2.0",
     description:
         "Rigorous dotfiles requirement deployer: verify wm.requires binaries, install the missing ones via the platform deploy script.",
 });
@@ -64,6 +73,8 @@ cli.command(unarchiveCommand);
 cli.command(packagesCommand);
 cli.command(preserveCommand);
 cli.command(servicesCommand);
+cli.command(toolchainCommand);
+cli.command(dependsCommand);
 
 if (compiled) process.chdir(origCwd);
 

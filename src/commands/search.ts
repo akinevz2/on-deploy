@@ -22,7 +22,7 @@ export default defineCommand({
         only: option(z.string().optional(), {
             description: "comma/space-separated subset of binaries to search",
         }),
-        all: option(z.boolean().optional(), {
+        all: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "search EVERY binary, including installed ones",
             short: "a",
         }),

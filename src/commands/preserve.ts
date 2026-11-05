@@ -178,23 +178,23 @@ export default defineCommand({
     description:
         "Resolve stow conflicts for packages before (re)stowing — per-file TUI with side-by-side diff, or the archive-first default",
     options: {
-        "dry-run": option(z.boolean().optional(), {
+        "dry-run": option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "print the plan per package, change nothing",
         }),
-        yes: option(z.boolean().optional(), {
+        yes: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "assume yes (non-interactive; default is keep)",
             short: "y",
         }),
         only: option(z.string().optional(), {
             description: "comma/space-separated packages (skips the TUI checklist)",
         }),
-        adopt: option(z.boolean().optional(), {
+        adopt: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "adopt-flow: stow --adopt the pre-existing $HOME files into the repo and report git diff (mine wins)",
         }),
-        keep: option(z.boolean().optional(), {
+        keep: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "skip the prompt; keep the deployed content",
         }),
-        restore: option(z.boolean().optional(), {
+        restore: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "skip the prompt; restore stored user content (or revert to dots in --adopt mode)",
         }),
         store: option(z.string().optional(), {
