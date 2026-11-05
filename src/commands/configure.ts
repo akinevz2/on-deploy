@@ -20,7 +20,7 @@ import {
     readFileSync, writeFileSync, existsSync, readdirSync,
     chmodSync, realpathSync,
 } from "node:fs";
-import { checkDotsEnv, DOTS_DIR, readRequires } from "../lib/dots";
+import { checkDotsEnv, DOTS_DIR, readRequires, readWmPackages } from "../lib/dots";
 import { readLine } from "../lib/lines";
 import { runApply } from "../lib/configureCore";
 import { walk } from "./install";
@@ -439,8 +439,22 @@ export default defineCommand({
                         process.exit(1);
                     }
                     console.log("wizard: package install rules");
+                    // scope to the wm.packages manifest — the individually
+                    // deployable packages (novnc/x11vnc/xrdp/xvfb…) must
+                    // NOT be swept here: a blanket walk installs them AND
+                    // then fails on their unstowed user units
+                    const manifest = readWmPackages();
+                    const rules = packagesWithMakefiles().filter(
+                        (pkg) => manifest.includes(pkg),
+                    );
+                    const skipped = packagesWithMakefiles().filter(
+                        (pkg) => !manifest.includes(pkg),
+                    );
+                    if (skipped.length > 0) {
+                        console.log(`wizard: skipped (not in wm.packages): ${skipped.join(" ")}`);
+                    }
                     const results: PkgResult[] = [];
-                    for (const pkg of packagesWithMakefiles()) {
+                    for (const pkg of rules) {
                         results.push(runRule(pkg, "install"));
                     }
                     printResults(results);

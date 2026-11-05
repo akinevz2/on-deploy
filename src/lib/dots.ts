@@ -3,7 +3,7 @@
 
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 
 export const DOTS_DIR = join(process.env.HOME!, "dots");
 export const INSTALL_BIN_DIR = join(process.env.HOME!, ".local/bin/install");
@@ -93,6 +93,24 @@ export async function readRequires(file = "wm.requires"): Promise<Requires> {
         const session = lines.length >= 3 ? lines[1] : "wsl-systemd";
         return { binaries, session, target: lines[lines.length - 1] };
     });
+}
+
+/**
+ * Parse wm.packages — the STOW manifest. One package per line;
+ * comments (#) and blank lines are ignored. Scoping source: the
+ * package-rule phase must ONLY touch the packages manifested here —
+ * the residually deployable packages (novnc/x11vnc/xrdp/xvfb and the
+ * system-* pair) install on demand through their own verbs, and a
+ * blanket walk of packagesWithMakefiles() would deploy (and then FAIL
+ * on their unstowed user units) packages nobody asked for.
+ */
+export function readWmPackages(): string[] {
+    return readFileSync(join(DOTS_DIR, "wm.packages"), "utf8")
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l && !l.startsWith("#"))
+        .flatMap((l) => l.split(/\s+/))
+        .filter(Boolean);
 }
 
 /** Which binaries are already on PATH. */
