@@ -21,7 +21,7 @@ on-deploy preserve     resolve stow conflicts before (re)stowing:
                        bunli-native TUI — package checklist -> per-file
                        decisions with side-by-side/inline diff; the
                        archive-first keep flow is the non-tty fallback
-on-deploy services     run the service.order units:
+on-deploy services     run the services.required units:
                        check|start|stop|restart|status
 
 (no `apply` — folded into `configure`; no `toolchain` / `deps` —
@@ -44,12 +44,16 @@ to patch) live in the package Makefiles
 ## The contract
 
 `on-deploy` runs **inside the ~/dots checkout or any subdirectory of
-it** (the cwd check walks up to the `wm.requires` marker — package
+it** (the cwd check walks up to the `wm.required` marker — package
 dependency Makefiles `make -C dots/<pkg>/.local/share/<pkg>` and still
 call it). git must agree the origin is `akinevz2/doftiles`. It reads
 two repo-level manifests:
 
-- **`wm.requires`** — line 1: the required binaries, whitespace-
+- **`stows.required`** — the stow-package manifest (one line per
+  package; `#` comments and blanks ignored). The configuring scope for
+  the stow walks.
+
+- **`wm.required`** — line 1: the required binaries, whitespace-
   separated. Last non-comment line: the **deploy target** platform
   name (`ubuntu`, `manjaro`, …). That name selects the deploy script:
   `~/.local/bin/install/<target>.deploy`, whose contract is
@@ -57,7 +61,7 @@ two repo-level manifests:
   - `<target>.deploy install <binary>` → prints the install COMMAND
     (which on-deploy then EXECUTES — sudo prompts pass through)
 
-- **`wm.requires`** (continued) — the optional `session = <model>`
+- **`wm.required`** (continued) — the optional `session = <model>`
   line sets the DEPLOYMENT MODEL (default `wsl-systemd`):
   `wsl-systemd` is the WSL bypass — NO display manager; hlwm runs as
   the systemd **user** unit and apply only VERIFIES the external X
@@ -70,7 +74,7 @@ two repo-level manifests:
 
 ```
 $ on-deploy check
-target: ubuntu (wm.requires)
+target: ubuntu (wm.required)
   herbstluftwm         installed
   hsetroot             MISSING (package: hsetroot)
 ```
@@ -108,9 +112,21 @@ entirely from the caller (the package Makefiles). Platform resolution
 
 ### `configure` — configure the deployment (TUI or flags)
 
-- deploy target + required binaries (`wm.requires`)
-- deployment model: session + features + services/units
-  (the wm.requires session line)
+The three manifests the verb edits:
+
+- **`stows.required`** — the stow-package manifest (one package per
+  line; `#` comments ignored). The scope of the stow walks and the
+  config shipped by `make wm` / `packages` sweeps.
+- **`wm.required`** — line 1 the required binaries (whitespace-
+  separated), line 2 the optional deployment session (`wsl-systemd`),
+  LAST non-comment line the deploy target (`ubuntu`, `manjaro`, …).
+- **`system.required`** — each non-comment line: a stow package plus
+  its dots-relative submodule path(s). THE CONFIGURED SUBMODULE SCOPE:
+  `on-deploy depends` syncs/builds/installs exactly the packages it
+  lists (intersected with .Makefile presence); the bare run is the
+  discovery report from here.
+- deployment model: session/features/units profile (the wm.required
+  session line)
 - git credentials — stored in `dots/shell/.my-credentials`
   (gitignored, stowed to ~/.my-credentials), NOT in the user's
   profile; when the file is ABSENT (fresh machine) and no flags were
@@ -202,7 +218,7 @@ answers "first deployment on a dirty machine" and its restore writes
 into the *package tree* (the dots-owned side), which `unarchive`
 deliberately refuses to touch.
 
-### `services` — run the service.order units
+### `services` — run the services.required units
 
 ```
 on-deploy services check      daemon-reload + enable --now each unit
@@ -217,7 +233,7 @@ on-deploy services status     report is-active per unit
 All unit actions run `--no-block` (a headless herbst polls 30s for X
 per attempt and would idle the caller). start/stop/restart confirm on
 a TTY; non-interactive runs REQUIRE `--yes`. The unit list comes
-entirely from the repo-level `service.order` manifest — no package
+entirely from the repo-level `services.required` manifest — no package
 knowledge here.
 
 ### `toolchain` / `deps` — REMOVED (moved to the depends package)
@@ -250,7 +266,7 @@ Makefile: `make -C depends/.local/share/depends install`, which
   diffview.tsx`, the side-by-side diff viewer; tsconfig sets
   react-jsx + @opentui/react as the JSX import source)
 - `src/lib/dots.ts` — the environment + manifest contract (cwd
-  walk-up to the repo root, origin check, wm.requires parsing)
+  walk-up to the repo root, origin check, system.required parsing)
 - `src/lib/deployScript.ts` — the `<target>.deploy` protocol
 - `src/lib/platforms.ts` — platform resolution (debian-wsl | debian |
   archlinux) + generic step composition; apply DELEGATES to it
@@ -274,7 +290,7 @@ dots Makefile                  bootstrap | install/stow | services-* |
        └─ on-deploy archive|unarchive <pkg>  (overwrites guard)
        └─ on-deploy preserve <pkg>          (conflict-safe stow)
   └─ on-deploy configure — the manifest edits + the folded apply
-  └─ on-deploy services <action> — the service.order runner
+  └─ on-deploy services <action> — the services.required runner
 ```
 
 Binary dependency management ALWAYS flows through on-deploy; the

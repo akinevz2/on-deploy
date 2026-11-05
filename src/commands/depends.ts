@@ -27,7 +27,7 @@ import { z } from "zod";
 import { join } from "node:path";
 import { checkDotsEnv, DOTS_DIR } from "../lib/dots";
 import {
-    depsMakefile, packagesWithDepsMakefiles, submodulesByPackage, type PkgResult,
+    depsMakefile, submodulesByPackage, type PkgResult,
 } from "../lib/pkgops";
 
 function shInherit(args: string[], cwd: string): number {
@@ -102,9 +102,17 @@ export default defineCommand({
             }
         }
 
-        // 2) DRIVE — the packages that ship dots/<pkg>/.local/state/depends/<pkg>.Makefile
+        // 2) DRIVE — CONFIGURED SCOPE: the packages system.required lists
+        // (submodule manifest), intersected with .Makefile presence — a
+        // package with submodules but no Makefile is a misconfiguration,
+        // reported, not silently skipped
         const subs = submodulesByPackage();
-        let targets = packagesWithDepsMakefiles();
+        let targets = Object.keys(subs)
+            .filter((p) => depsMakefile(p) !== null)
+            .sort();
+        for (const p of Object.keys(subs)) {
+            if (!depsMakefile(p)) console.log(`depends: ${p}: listed in system.required but has no depends Makefile`);
+        }
         if (flags.only) {
             const wanted = flags.only.split(/[,\s]+/).filter(Boolean);
             const unknown = wanted.filter((p) => !targets.includes(p));

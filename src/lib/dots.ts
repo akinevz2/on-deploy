@@ -1,5 +1,5 @@
 // src/lib/dots.ts — the environment contract: the repo, its origin,
-// and the wm.requires manifest.
+// and the manifests (wm.required / stows.required).
 
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
@@ -26,8 +26,9 @@ function sh(cmd: string, args: string[], cwd?: string): { code: number; out: str
 export function checkDotsEnv(): EnvCheck {
     let cwd = process.cwd();
     if (cwd !== DOTS_DIR) {
-        // walk up from the cwd looking for the repo root (wm.requires
-        // marker) — accepts subdirectories, rejects unrelated dirs.
+        // walk up from the cwd looking for the repo root (the
+        // wm.required marker; stows.required accepted for migration) —
+        // accepts subdirectories, rejects unrelated dirs.
         // Compare REALPATHS: HOME itself may be reached through a symlink
         // (e.g. /tmp/opencode/.../home/dots -> ~/dots), and a raw string
         // comparison would reject a genuinely-inside-the-repo cwd.
@@ -35,7 +36,8 @@ export function checkDotsEnv(): EnvCheck {
         let dir = cwd;
         let found = "";
         for (let i = 0; i < 8 && dir !== "/" && dir !== ""; i += 1) {
-            if (existsSync(join(dir, "wm.requires"))) { found = dir; break; }
+            if (existsSync(join(dir, "wm.required")) ||
+                existsSync(join(dir, "stows.required"))) { found = dir; break; }
             dir = dirname(dir);
         }
         let realFound = found;
@@ -68,13 +70,13 @@ export interface Requires {
 }
 
 /**
- * Parse wm.requires — the SINGLE deployment manifest. Line 1 = the
+ * Parse wm.required — the deployment manifest. Line 1 = the
  * required binaries (whitespace-separated); an optional
  * `session = <model>` KEY=VALUE line = the deployment model
  * (default "wsl-systemd"); the last remaining non-comment line = the
  * deploy target name. Anything else is a structural error.
  */
-export async function readRequires(file = "wm.requires"): Promise<Requires> {
+export async function readRequires(file = "wm.required"): Promise<Requires> {
     const raw = Bun.file(join(DOTS_DIR, file));
     return raw.text().then((text) => {
         const lines = text
@@ -96,7 +98,7 @@ export async function readRequires(file = "wm.requires"): Promise<Requires> {
 }
 
 /**
- * Parse wm.packages — the STOW manifest. One package per line;
+ * Parse stows.required — the STOW manifest. One package per line;
  * comments (#) and blank lines are ignored. Scoping source: the
  * package-rule phase must ONLY touch the packages manifested here —
  * the residually deployable packages (novnc/x11vnc/xrdp/xvfb and the
@@ -105,7 +107,7 @@ export async function readRequires(file = "wm.requires"): Promise<Requires> {
  * on their unstowed user units) packages nobody asked for.
  */
 export function readWmPackages(): string[] {
-    return readFileSync(join(DOTS_DIR, "wm.packages"), "utf8")
+    return readFileSync(join(DOTS_DIR, "stows.required"), "utf8")
         .split("\n")
         .map((l) => l.trim())
         .filter((l) => l && !l.startsWith("#"))

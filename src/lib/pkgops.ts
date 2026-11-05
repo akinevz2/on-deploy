@@ -69,9 +69,24 @@ export function packagesWithDepsMakefiles(): string[] {
     return out.sort();
 }
 
-/** submodule paths of the repo (.gitmodules), mapped to the stow
- *  package that owns each (the first path segment) */
+/** submodule paths mapped to the stow package that owns each
+ *  (duplicated across packages). CONFIGURED SOURCE: the system.required
+ *  manifest — each non-comment line is `<pkg> <path> <path>...`.
+ *  FALLBACK: .gitmodules walk (grouped by first path segment) when the
+ *  manifest is missing or empty — keeps bare checkouts usable. */
 export function submodulesByPackage(): Record<string, string[]> {
+    const manifest = join(DOTS, "system.required");
+    if (existsSync(manifest)) {
+        const out: Record<string, string[]> = {};
+        for (const line of readFileSync(manifest, "utf8").split("\n")) {
+            const l = line.trim();
+            if (!l || l.startsWith("#")) continue;
+            const fields = l.split(/\s+/).filter(Boolean);
+            if (fields.length < 2) continue;
+            (out[fields[0]] ??= []).push(...fields.slice(1));
+        }
+        if (Object.keys(out).length > 0) return out;
+    }
     const gitmodules = join(DOTS, ".gitmodules");
     if (!existsSync(gitmodules)) return {};
     const out: Record<string, string[]> = {};

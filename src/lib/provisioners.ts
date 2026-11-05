@@ -62,7 +62,7 @@ export async function targetPkg(
 
 /** verifyWslSession — the WSL session verify: the external X server
  *  reachable on the DISPLAY the units use. Unit enablement belongs to
- *  the dots services flow (service.order / package Makefiles). */
+ *  the dots services flow (services.required / package Makefiles). */
 export function verifyWslSession(): Step {
     const xok = sh("sh", ["-c", 'xset -display "$1" q >/dev/null 2>&1', "-", detectDisplay().display]);
     const ok = xok.code === 0;

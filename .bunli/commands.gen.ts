@@ -65,11 +65,15 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
     },
   'configure': {
       name: 'configure',
-      description: 'Configure the deployment: target + binaries (wm.requires), deployment model + services (deploy.profile), git credentials (dots/shell/.my-credentials)',
+      description: 'Configure the deployment: target + binaries (wm.required), deployment model + services (deploy.profile), git credentials (dots/shell/.my-credentials)',
       options: {
         'target': { type: 'z.string.optional', required: false, hasDefault: false, description: 'set the deploy target directly', fileType: 'directory', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
         'add': { type: 'z.string.optional', required: false, hasDefault: false, description: 'comma/space-separated binaries to add', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
         'remove': { type: 'z.string.optional', required: false, hasDefault: false, description: 'comma/space-separated binaries to remove', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'add-stows': { type: 'z.string.optional', required: false, hasDefault: false, description: 'comma/space-separated stow packages to add (stows.required)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'remove-stows': { type: 'z.string.optional', required: false, hasDefault: false, description: 'comma/space-separated stow packages to drop (stows.required)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'add-subs': { type: 'z.string.optional', required: false, hasDefault: false, description: 'submodule lines to add: pkg:pkg-relative.path[,pkg:path2…] (system.required)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'remove-subs': { type: 'z.string.optional', required: false, hasDefault: false, description: 'submodule entries to drop ("pkg" or pkg:path) (system.required)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
         'session': { type: 'z.string.optional', required: false, hasDefault: false, schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
         'name': { type: 'z.string.optional', required: false, hasDefault: false, description: 'git user name (three words; stored in dots/shell/.my-credentials)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
         'email': { type: 'z.string.optional', required: false, hasDefault: false, description: 'git user email (stored in dots/shell/.my-credentials)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
@@ -166,7 +170,7 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
     },
   'services': {
       name: 'services',
-      description: 'Run service.order units: check|start|stop|restart|status (systemd --user, --no-block, stow-safe disable)',
+      description: 'Run services.required units: check|start|stop|restart|status (systemd --user, --no-block, stow-safe disable)',
       options: {
         'yes': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'no confirmation (non-interactive)', short: 'y', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
       },

@@ -1,6 +1,6 @@
 // src/commands/configure.ts — edit the deployment manifests from a TUI
 // (or flags): the deploy TARGET and the REQUIRED-PACKAGE list of
-// wm.requires.
+// wm.required.
 //
 //   on-deploy configure              interactive menu / flags
 //   on-deploy configure --target arch
@@ -8,7 +8,7 @@
 //   on-deploy configure --remove pkgA
 //   on-deploy configure --show
 //
-// wm.requires structure: line 1 = whitespace-separated required
+// wm.required structure: line 1 = whitespace-separated required
 // binaries; the LAST non-comment line = the deploy target name
 // (selecting ~/.local/bin/install/<target>.deploy). Comments (#) are
 // preserved; edits rewrite only the two content lines.
@@ -51,11 +51,11 @@ interface Manifest {
 }
 
 function readManifest(): Manifest {
-    const text = readFileSync(join(DOTS_DIR, "wm.requires"), "utf8");
+    const text = readFileSync(join(DOTS_DIR, "wm.required"), "utf8");
     const all = text.split("\n");
     const content = all.filter((l) => l.trim() && !l.trim().startsWith("#"));
     if (content.length < 2) {
-        throw new Error("wm.requires: expected a binaries line and a target line");
+        throw new Error("wm.required: expected a binaries line and a target line");
     }
     const comments = all.slice(0, all.indexOf(content[0]));
     // positional layout: [binaries] [session?] [target]
@@ -77,31 +77,31 @@ function writeManifest(m: Manifest): void {
     // saved manifest silently loses the deployment model
     if (m.session || readSession()) writeSession(m.session);
     writeFileSync(
-        join(DOTS_DIR, "wm.requires"),
+        join(DOTS_DIR, "wm.required"),
         [...m.comments, m.binaries.join(" "), m.session, m.target].join("\n") + "\n",
     );
 }
 
-// --- the deployment model (the `session =` line of wm.requires) ------------
+// --- the deployment model (the `session =` line of wm.required) ------------
 // The model selects the deploy target implementation (apply): session =
-// HOW the graphical session starts. wm.requires IS the single manifest —
+// HOW the graphical session starts. wm.required IS the manifest —
 // binaries line, session line, deploy target line (positional). Comments
 // are preserved; only the session line is rewritten in place.
 
 const SESSIONS = ["greetd", "wsl-systemd", "xinit", "nested"];
 
-/** the session model from wm.requires line 2 ("" = absent) */
+/** the session model from wm.required line 2 ("" = absent) */
 function readSession(): string {
-    const lines = readFileSync(join(DOTS_DIR, "wm.requires"), "utf8")
+    const lines = readFileSync(join(DOTS_DIR, "wm.required"), "utf8")
         .split("\n")
         .map((l) => l.trim())
         .filter((l) => l && !l.startsWith("#"));
     return lines.length >= 3 ? lines[1] : "";
 }
 
-/** rewrite ONLY the session line (wm.requires line 2), comments kept */
+/** rewrite ONLY the session line (wm.required line 2), comments kept */
 function writeSession(session: string): void {
-    const path = join(DOTS_DIR, "wm.requires");
+    const path = join(DOTS_DIR, "wm.required");
     const lines = readFileSync(path, "utf8").split("\n");
     const content = lines
         .map((l, i) => ({ l, i }))
@@ -109,6 +109,57 @@ function writeSession(session: string): void {
     if (content.length >= 3) lines[content[1].i] = session;
     else lines.splice(content[0].i + 1, 0, session);
     writeFileSync(path, lines.join("\n"));
+}
+
+// --- stows.required (the STOW manifest) & system.required (SUBMODULES) ----
+// Both are plain list files: comments (#) and blanks preserved, content
+// lines rewritten per edit. The configure TUI offers checkslists over
+// the same structured pieces; flags accept comma/space separated specs.
+
+interface StowsFile { comments: string[]; packages: string[] }
+
+function readStows(): StowsFile {
+    const all = readFileSync(join(DOTS_DIR, "stows.required"), "utf8").split("\n");
+    const firstContent = all.findIndex((l) => l.trim() && !l.trim().startsWith("#"));
+    const comments = firstContent < 0 ? all.slice() : all.slice(0, firstContent);
+    const packages = all
+        .filter((l) => l.trim() && !l.trim().startsWith("#"))
+        .flatMap((l) => l.split(/\s+/))
+        .filter(Boolean);
+    return { comments, packages };
+}
+
+function writeStows(s: StowsFile): void {
+    writeFileSync(
+        join(DOTS_DIR, "stows.required"),
+        [...s.comments, ...s.packages].join("\n") + "\n",
+    );
+}
+
+interface SubsFile { comments: string[]; entries: { pkg: string; paths: string[] }[] }
+
+function readSubs(): SubsFile {
+    const all = readFileSync(join(DOTS_DIR, "system.required"), "utf8").split("\n");
+    const firstContent = all.findIndex((l) => l.trim() && !l.trim().startsWith("#"));
+    const comments = firstContent < 0 ? all.slice() : all.slice(0, firstContent);
+    const entries: SubsFile["entries"] = [];
+    for (const line of all) {
+        const l = line.trim();
+        if (!l || l.startsWith("#")) continue;
+        const fields = l.split(/\s+/).filter(Boolean);
+        if (fields.length >= 2) entries.push({ pkg: fields[0], paths: fields.slice(1) });
+    }
+    return { comments, entries };
+}
+
+function writeSubs(s: SubsFile): void {
+    writeFileSync(
+        join(DOTS_DIR, "system.required"),
+        [
+            ...s.comments,
+            ...s.entries.map((e) => [e.pkg, ...e.paths].join(" ")),
+        ].join("\n") + "\n",
+    );
 }
 
 // --- git credentials (dots/shell/.my-credentials, stowed) ------------------
@@ -219,10 +270,14 @@ async function tuiEdit(m: Manifest): Promise<EditResult> {
     let session = readSession();
 
     for (;;) {
+        const stows = readStows();
+        const subs = readSubs();
         const a = await tuiSelect("configure — what to edit?", [
             { label: `deploy target:     ${m.target}`, value: "target" },
             { label: `required binaries: ${m.binaries.join(" ")}`, value: "binaries" },
             { label: `session model:     ${session || "wsl-systemd (default)"}`, value: "session" },
+            { label: `stow packages:     ${stows.packages.join(" ") || "(none)"}`, value: "stows" },
+            { label: `submodules:        ${subs.entries.map((e) => e.pkg).join(" ") || "(none)"}`, value: "subs" },
             { label: `git credentials:   ${cred.name || "(unset)"} <${cred.email || "none"}>`, value: "credentials" },
             { label: "save + apply", value: "save" },
             { label: "quit without saving", value: "quit" },
@@ -238,6 +293,53 @@ async function tuiEdit(m: Manifest): Promise<EditResult> {
         }
         if (a === "save") break;
 
+        if (a === "stows") {
+            // candidate catalog: every repo top-level directory (the stow
+            // package set); current list always included + preselected
+            const known = new Set<string>(stows.packages);
+            for (const e of readdirSync(DOTS_DIR, { withFileTypes: true })) {
+                if (e.isDirectory() && !e.name.startsWith(".")) known.add(e.name);
+            }
+            const names = [...known].sort();
+            const sel = await tuiChecklist<string>(
+                "stow packages (stows.required) — space toggles, enter confirms",
+                names.map((p) => ({
+                    label: p,
+                    value: p,
+                    hint: stows.packages.includes(p) ? "stowed" : "",
+                })),
+                { preselect: stows.packages },
+            );
+            if (sel === null) continue;
+            writeStows({ comments: stows.comments, packages: names.filter((p) => sel.includes(p)) });
+            console.log("configure: stows.required rewritten to the checked set");
+            continue;
+        }
+        if (a === "subs") {
+            // keep the manifest entries whose line is still checked;
+            // additions loop after the checklist until an empty edit
+            const labels = subs.entries.map((e) => [e.pkg, ...e.paths].join(" "));
+            const sel = await tuiChecklist<string>(
+                "system.required submodules — UNCHECK a line to DROP it, enter confirms",
+                labels.map((l) => ({ label: l, value: l })),
+                { preselect: labels },
+            );
+            if (sel === null) continue;
+            const kept = subs.entries.filter((e) => sel.includes([e.pkg, ...e.paths].join(" ")));
+            for (;;) {
+                const add = await tuiText("add a submodule line: <pkg> <dots-relative path…> (empty = done)");
+                if (add === null || !add.trim()) break;
+                const fields = add.trim().split(/\s+/);
+                if (fields.length < 2) {
+                    console.log("configure: need <pkg> AND at least one <path> — retry (empty to skip)");
+                    continue;
+                }
+                kept.push({ pkg: fields[0], paths: fields.slice(1) });
+            }
+            writeSubs({ comments: subs.comments, entries: kept });
+            console.log(`configure: system.required rewritten (${kept.length} package line(s))`);
+            continue;
+        }
         if (a === "target") {
             const t = await tuiSelect<string>("deploy target", [
                 ...KNOWN_TARGETS.map((k) => ({ label: k, value: k })),
@@ -311,7 +413,7 @@ async function tuiEdit(m: Manifest): Promise<EditResult> {
 export default defineCommand({
     name: "configure",
     description:
-        "Configure the deployment: target + binaries (wm.requires), deployment model + services (deploy.profile), git credentials (dots/shell/.my-credentials)",
+        "Configure the deployment: target + binaries (wm.required), deployment model + services (deploy.profile), git credentials (dots/shell/.my-credentials)",
     options: {
         target: option(z.string().optional(), {
             description: "set the deploy target directly",
@@ -321,6 +423,18 @@ export default defineCommand({
         }),
         remove: option(z.string().optional(), {
             description: "comma/space-separated binaries to remove",
+        }),
+        "add-stows": option(z.string().optional(), {
+            description: "comma/space-separated stow packages to add (stows.required)",
+        }),
+        "remove-stows": option(z.string().optional(), {
+            description: "comma/space-separated stow packages to drop (stows.required)",
+        }),
+        "add-subs": option(z.string().optional(), {
+            description: "submodule lines to add: pkg:pkg-relative.path[,pkg:path2…] (system.required)",
+        }),
+        "remove-subs": option(z.string().optional(), {
+            description: "submodule entries to drop (\"pkg\" or pkg:path) (system.required)",
         }),
         session: option(z.string().optional(), {
             description: `deployment model session (${SESSIONS.join("|")})`,
@@ -348,9 +462,13 @@ export default defineCommand({
         const cred = readCredentials();
 
         if (flags.show) {
+            const stowsNow = readStows();
+            const subsNow = readSubs();
             console.log(`target:    ${m.target}`);
             console.log(`binaries:  ${m.binaries.join(" ")}`);
             console.log(`session:   ${readSession() || "wsl-systemd (default)"}`);
+            console.log(`stows:     ${stowsNow.packages.join(" ") || "(none)"}`);
+            console.log(`submodules:${subsNow.entries.map((e) => " [" + [e.pkg, ...e.paths].join(" ") + "]").join("") || " (none)"}`);
             console.log(`git:       ${cred.name || "(unset)"} <${cred.email}>`);
             return;
         }
@@ -379,6 +497,44 @@ export default defineCommand({
             }
             writeSession(flags.session);
         }
+        // stows.required + system.required flag edits — applied
+        // directly (they stand alone; apply/stow flows re-read them)
+        if (flags["add-stows"] || flags["remove-stows"]) {
+            const s = readStows();
+            const drop = (flags["remove-stows"] ?? "").split(/[,\s]+/).filter(Boolean);
+            s.packages = s.packages.filter((p) => !drop.includes(p));
+            for (const p of (flags["add-stows"] ?? "").split(/[,\s]+/).filter(Boolean)) {
+                if (!s.packages.includes(p)) s.packages.push(p);
+            }
+            writeStows(s);
+            console.log(`configure: stows.required now: ${s.packages.join(" ")}`);
+        }
+        if (flags["add-subs"] || flags["remove-subs"]) {
+            const s = readSubs();
+            const dropped = (flags["remove-subs"] ?? "").split(/[,\s]+/).filter(Boolean);
+            s.entries = s.entries.filter((e) => {
+                const whole = [e.pkg, ...(e.paths ?? [])].join(" ");
+                return !dropped.includes(whole) && !dropped.includes(e.pkg);
+            });
+            for (const spec of (flags["add-subs"] ?? "").split(/[,\s]+/).filter(Boolean)) {
+                const pkg = spec.split(":", 1)[0];
+                let path = spec.slice(pkg.length + 1);
+                if (!path) {
+                    console.error(`configure: add-subs needs pkg:path — '${spec}' has no path`);
+                    process.exit(2);
+                }
+                path = path.replace(/^dots\//, "");
+                if (!existsSync(join(DOTS_DIR, path))) {
+                    console.error(`configure: submodule path '${path}' does not exist in the dots checkout`);
+                    process.exit(2);
+                }
+                const existing = s.entries.find((e) => e.pkg === pkg);
+                if (!existing) s.entries.push({ pkg, paths: [path] });
+                else if (!existing.paths.includes(path)) existing.paths.push(path);
+            }
+            writeSubs(s);
+            console.log(`configure: system.required now ${s.entries.length} package line(s)`);
+        }
         let credNotes: string[] | null = null;
         if (prompted) {
             credNotes = writeCredentials(prompted.name, prompted.email);
@@ -394,7 +550,8 @@ export default defineCommand({
         }
 
         const modelDirty = flags.session;
-        if (!flags.target && !flags.add && !flags.remove && !modelDirty && !credNotes) {
+        if (!flags.target && !flags.add && !flags.remove && !modelDirty && !credNotes &&
+            !flags["add-stows"] && !flags["remove-stows"] && !flags["add-subs"] && !flags["remove-subs"]) {
             // TTY-ONLY menu: bunli 0.9.x prompts hard-fail without an
             // interactive terminal (the old readLine menu tolerated
             // pipes; the opentui one does not). A piped/captured run
@@ -439,7 +596,7 @@ export default defineCommand({
                         process.exit(1);
                     }
                     console.log("wizard: package install rules");
-                    // scope to the wm.packages manifest — the individually
+                    // scope to the stows.required manifest — the individually
                     // deployable packages (novnc/x11vnc/xrdp/xvfb…) must
                     // NOT be swept here: a blanket walk installs them AND
                     // then fails on their unstowed user units
@@ -451,7 +608,7 @@ export default defineCommand({
                         (pkg) => !manifest.includes(pkg),
                     );
                     if (skipped.length > 0) {
-                        console.log(`wizard: skipped (not in wm.packages): ${skipped.join(" ")}`);
+                        console.log(`wizard: skipped (not in wm.required): ${skipped.join(" ")}`);
                     }
                     const results: PkgResult[] = [];
                     for (const pkg of rules) {

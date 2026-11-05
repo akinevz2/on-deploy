@@ -1,6 +1,6 @@
-// src/commands/services.ts — the service.order runner. The dots Makefile
+// src/commands/services.ts — the services.required runner. The dots Makefile
 // DELEGATES here: enable/start/stop/restart over the units listed in
-// service.order (repo-level manifest, whitespace-split, start order).
+// services.required (repo-level manifest, whitespace-split, start order).
 //
 //   on-deploy services check      daemon-reload + enable --now each unit
 //   on-deploy services start      start each unit (reset-failed first)
@@ -10,7 +10,7 @@
 //
 // Non-interactive runs REQUIRE --yes (start/stop/restart confirm on a
 // tty; nothing hangs on stdin). NO package knowledge: the unit list
-// comes entirely from service.order (the runner lives in
+// comes entirely from services.required (the runner lives in
 // lib/services.ts, shared with the `deploy` menu).
 
 import { defineCommand, option } from "@bunli/core";
@@ -24,7 +24,7 @@ import {
 export default defineCommand({
     name: "services",
     description:
-        "Run service.order units: check|start|stop|restart|status (systemd --user, --no-block, stow-safe disable)",
+        "Run services.required units: check|start|stop|restart|status (systemd --user, --no-block, stow-safe disable)",
     options: {
         yes: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "no confirmation (non-interactive)",
@@ -44,7 +44,7 @@ export default defineCommand({
         }
         const order = readServiceOrder();
         if (order.length === 0) {
-            console.error("services: empty or missing service.order");
+            console.error("services: empty or missing services.required");
             process.exit(2);
         }
         const units = unitify(order);

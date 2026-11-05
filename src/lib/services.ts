@@ -1,4 +1,4 @@
-// src/lib/services.ts — the service.order runner, shared by the
+// src/lib/services.ts — the services.required runner, shared by the
 // `services` verb and the `deploy` menu. All actions run --no-block (a
 // headless herbst polls 30s for X per attempt and would idle the
 // caller). Stop does NOT use `systemctl --user disable`: a stow-linked
@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { DOTS_DIR } from "./dots";
 
-export const SERVICE_ORDER_FILE = join(DOTS_DIR, "service.order");
+export const SERVICE_ORDER_FILE = join(DOTS_DIR, "services.required");
 
 export type ServicesAction = "check" | "start" | "stop" | "restart" | "status";
 
@@ -28,7 +28,7 @@ function run(cmd: string): number {
     return p.status ?? 1;
 }
 
-/** the service.order manifest (base names, whitespace-split per line) */
+/** the services.required manifest (base names, whitespace-split per line) */
 export function readServiceOrder(): string[] {
     return shOut(`grep -vi '^#' ${JSON.stringify(SERVICE_ORDER_FILE)} 2>/dev/null`)
         .out.split(/\s+/)

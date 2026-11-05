@@ -1,6 +1,6 @@
 // src/lib/targets.ts — deploy target resolution + step composition.
 //
-// apply resolves a DEPLOY TARGET from the wm.requires manifest (the
+// apply resolves a DEPLOY TARGET from the wm.required manifest (the
 // single deployment manifest: binaries line, optional
 // `session = <model>` line, target line) and runs that target's
 // GENERIC step list. The three stabilized implementations:
@@ -63,7 +63,7 @@ export interface TargetStep {
 /** The ordered GENERIC step list for the deploy target: (wsl:
  *  vcxsrv + session verify). Package-group setup is NOT here — it
  *  lives in the package Makefiles; unit enabling belongs to the dots
- *  services flow (service.order / package Makefiles). */
+ *  services flow (services.required / package Makefiles). */
 export function targetSteps(p: DeployTarget, dry: boolean): TargetStep[] {
     const steps: TargetStep[] = [];
     if (p.externalXServer) {
