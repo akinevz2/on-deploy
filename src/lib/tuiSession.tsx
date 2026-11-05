@@ -8,9 +8,9 @@
 // sweep). The patch is GONE: the runtimes/dependencies are pristine and
 // the machinery lives HERE instead.
 //
-//  1. ONE long-lived renderer; the ONLY keypress listener attached for
-//     the whole session lifetime is the dispatcher registered at
-//     initialize (never per prompt).
+//  1. ONE long-lived renderer AND one react root; the ONLY keypress
+//     listener attached for the whole session lifetime is the
+//     dispatcher registered at initialize (never per prompt).
 //  2. The views (lib/tuiMenuTree.tsx) are framework-native:
 //     navigation/activation happen inside the FOCUSED renderable's own
 //     handleKeyPress (the framework attaches it on focus() and removes
@@ -20,7 +20,14 @@
 //     active prompt; ctrl-c with the session idle EXITS the process
 //     (130) so make stops; ctrl-d keeps the focused editor's native
 //     bindings (input edit / textarea delete) and cancels a menu
-//     prompt otherwise.
+//     prompt otherwise. SIGTERM/SIGHUP (kill, systemd stop, hangup)
+//     tear the TUI down BEFORE exiting, so the shell never gets a
+//     raw-mode/alien-screen terminal back.
+//  4. Purity: the session internals are CONST once born — every
+//     late-bound slot lives in the `live` cell record and is mutated
+//     only through it; there is no bare `let` inside the session
+//     (module-level _session/sessionState are the two documented
+//     singletons and the only rebinds).
 //
 // Component framework note: the focused renderable sees keys through
 // its framework wiring; it does not reach this dispatcher's decisions,
@@ -132,7 +139,12 @@ export interface OnDeploySession {
     dispose: () => Promise<void>;
 }
 
-let sessionState: "unborn" | "idle" | "prompt" | "disposed" = "unborn";
+/** the two documented module rebinds: the process-lifetime session
+ *  (created lazily) and its coarse phase. Everything INSIDE a session
+ *  is const (the `live` cell record); tests re-enter createSession and
+ *  must not inherit the previous phases, hence the resets on birth. */
+type Phase = "unborn" | "idle" | "prompt" | "disposed";
+let sessionState: Phase = "unborn";
 
 /** true while a prompt owns the terminal */
 export function promptActive(): boolean {
@@ -168,6 +180,27 @@ function emitInterruptSignal(source: string) {
 
 const OPEN_TUI_CANCEL = Symbol("on-deploy:prompt_cancel");
 
+type RendererT = Awaited<ReturnType<typeof createCliRenderer>>;
+type RootT = ReturnType<typeof createRoot>;
+
+/** the birth-once slots of one session — every renderer-adjacent
+ *  assignment is a well-known cell, mutated ONLY by the initialize /
+ *  settle / dispose flows below. A plain record: assignment can't leak
+ *  the way numbers of copied listener refs could. */
+interface Live {
+    /** the green renderer (undefined until initialize first runs) */
+    renderer?: RendererT;
+    /** the ONE react root (created with the renderer) */
+    root?: RootT;
+    /** the singleton initialize promise */
+    init?: Promise<void>;
+    /** the ACTIVE prompt's render throttler */
+    render?: () => void;
+    /** the cancel resolver of the ACTIVE prompt — read directly by the
+     *  dispatcher and the SIGINT gate */
+    cancel?: () => void;
+}
+
 function createSession(
     deps?: {
         createRenderer?: typeof createCliRenderer;
@@ -175,24 +208,22 @@ function createSession(
         destroyEvent?: string;
     },
 ): OnDeploySession {
-    // NOTE: module-level state — a second session (tests, or re-entry
-    // after dispose) must not inherit the previous "disposed" state
-    sessionState = "unborn";
     const createRenderer = deps?.createRenderer ?? createCliRenderer;
     const createReactRoot = deps?.createRoot ?? createRoot;
     const depsDestroyEvent = deps?.destroyEvent ?? CliRenderEvents.DESTROY;
 
-    let renderer: Awaited<ReturnType<typeof createCliRenderer>> | undefined;
-    let initializePromise: Promise<void> | undefined;
-    let promptRoot: ReturnType<typeof createRoot> | undefined;
-    let promptRender: (() => void) | undefined;
+    // NOTE: module-level phase — a second session (tests, re-entry
+    // after dispose) must not inherit the previous "disposed" state
+    sessionState = "unborn";
 
-    // the cancel resolver of the ACTIVE prompt — assigned by runPrompt,
-    // cleared at settle; the dispatcher and the SIGINT gate both read
-    // it. A plain slot: assignment can't leak through unmounts the way
-    // an emitter listener could.
-    let activePromptCancel: (() => void) | undefined;
-
+    const live: Live = {
+        // explicit shape: exactly these slots, no more
+        renderer: undefined,
+        init: undefined,
+        root: undefined,
+        render: undefined,
+        cancel: undefined,
+    };
     const historyEntries: HistoryEntry[] = [];
 
     const historyLines = () => historyEntries.flatMap((entry) => entry.lines);
@@ -203,15 +234,15 @@ function createSession(
 
     const initialize = async () => {
         if (sessionState === "disposed") return;
-        if (renderer?.isDestroyed) {
-            renderer = undefined;
-            initializePromise = undefined;
+        if (live.renderer?.isDestroyed) {
+            live.renderer = undefined;
+            live.init = undefined;
         }
-        if (renderer) return;
-        if (initializePromise) return initializePromise;
+        if (live.renderer) return;
+        if (live.init) return live.init;
 
-        initializePromise = (async () => {
-            renderer = await createRenderer({
+        live.init = (async () => {
+            const boot = await createRenderer({
                 screenMode: "main-screen",
                 consoleMode: "disabled",
                 externalOutputMode: "passthrough",
@@ -219,41 +250,48 @@ function createSession(
                 targetFps: 30,
                 useMouse: false,
             });
-            const activeRenderer = renderer;
+            live.renderer = boot;
+
+            // ONE react root for the WHOLE session: createRoot() wires
+            // renderer.once(DESTROY, cleanup) PER root and never lets go
+            // of it — a root per prompt meant one irremovable listener
+            // per submenu round trip (the MaxListenersExceeded class).
+            // Prompts re-render into this single root; dispose unmounts it.
+            live.root = createReactRoot(boot);
 
             // raw layer: ctrl-c is the one key delivered before any
             // emitter; handle it here so the discipline is deterministic
             // (the test renderer doesn't carry this API — guard it)
-            if (typeof activeRenderer.prependInputHandler === "function") {
-                activeRenderer.prependInputHandler((sequence: string) => {
-                if (sequence === "\x03") {
-                    emitInterruptSignal("raw");
-                    return true;
-                }
-                if (sequence === "\x1b" && sessionState === "prompt") {
-                    activePromptCancel?.();
-                    return true;
-                }
-                return false;
+            if (typeof boot.prependInputHandler === "function") {
+                boot.prependInputHandler((sequence: string) => {
+                    if (sequence === "\x03") {
+                        emitInterruptSignal("raw");
+                        return true;
+                    }
+                    if (sequence === "\x1b" && sessionState === "prompt") {
+                        live.cancel?.();
+                        return true;
+                    }
+                    return false;
                 });
             }
 
             // DEBUG: ON_DEPLOY_TUI_DEBUG=<path> appends every key event there
-    const dbg = process.env.ON_DEPLOY_TUI_DEBUG;
-    const debugKeyDown = (tag: string, event: KeyEvent) => {
-        if (!dbg) return;
-        try {
-            appendFileSync(dbg, `${tag} name=${event.name} seq=${JSON.stringify(event.sequence ?? "")} ctrl=${event.ctrl} defaultPrevented=${event.defaultPrevented}\n`);
-        } catch { /* debug only */ }
-    };
-    activeRenderer.keyInput.on("keypress", (event: KeyEvent) => {
-        debugKeyDown("keypress", event);
-        // canon keys first; unmodified fall out to the focused
+            const dbg = process.env.ON_DEPLOY_TUI_DEBUG;
+            const debugKeyDown = (tag: string, event: KeyEvent) => {
+                if (!dbg) return;
+                try {
+                    appendFileSync(dbg, `${tag} name=${event.name} seq=${JSON.stringify(event.sequence ?? "")} ctrl=${event.ctrl} defaultPrevented=${event.defaultPrevented}\n`);
+                } catch { /* debug only */ }
+            };
+            boot.keyInput.on("keypress", (event: KeyEvent) => {
+                debugKeyDown("keypress", event);
+                // canon keys first; unmodified fall out to the focused
                 // renderable's own (framework-routed) handlers
                 if (isEscapeEvent(event)) {
                     event.preventDefault?.();
                     event.stopPropagation?.();
-                    activePromptCancel?.();
+                    live.cancel?.();
                     return;
                 }
                 if (isCtrlCEvent(event)) {
@@ -265,9 +303,9 @@ function createSession(
                 if (isEotEvent(event)) {
                     // inside a native editor keep the framework's own
                     // ctrl-d bindings; a menu prompt → cancel
-                    if (renderer?.currentFocusedEditor) return;
+                    if (live.renderer?.currentFocusedEditor) return;
                     if (sessionState !== "prompt") return;
-                    activePromptCancel?.();
+                    live.cancel?.();
                     return;
                 }
                 // everything else: the focused renderable sees the same
@@ -275,7 +313,7 @@ function createSession(
             });
         })();
 
-        await initializePromise;
+        await live.init;
         sessionState = "idle";
     };
 
@@ -290,10 +328,26 @@ function createSession(
         process.exit(130);
     };
 
+    // KILL TRAP: SIGTERM/SIGHUP (make, systemd stop, terminal hangup)
+    // must clean the TUI before returning to the shell — the raw-mode
+    // terminal and the alt-screen would leak the renderer otherwise.
+    // dispose() is async: run it to completion inside the handler,
+    // THEN exit with the conventional shell code. Registered at
+    // session birth (like onSessionSigint), removed at dispose.
+    const onSessionSignal = (code: number) => () => {
+        const running = live.renderer;
+        if (!running) process.exit(code);
+        void _session?.dispose()
+            .catch(() => undefined)
+            .finally(() => process.exit(code));
+    };
+    const onSessionTerm = onSessionSignal(143);
+    const onSessionHup = onSessionSignal(129);
+
     const appendHistoryLines = (lines: string[]) => {
         if (lines.length === 0) return;
         historyEntries.push({ lines: [...lines] });
-        promptRender?.();
+        live.render?.();
     };
 
     const flushHistoryToStdout = () => {
@@ -307,19 +361,19 @@ function createSession(
 
     async function runPrompt<T>(args: PromptRunArgs<T>): Promise<T | symbol> {
         await initialize();
-        const activeRenderer = renderer;
+        const activeRenderer = live.renderer;
         if (!activeRenderer || sessionState === "disposed") return OPEN_TUI_CANCEL;
 
-        const root = createReactRoot(activeRenderer);
-        promptRoot = root;
+        const root = live.root;
+        if (!root) return OPEN_TUI_CANCEL;
 
         return await new Promise<T | symbol>((resolve) => {
-            let settled = false;
-            let cleanedUp = false;
+            // settle once or die: idempotency carried in records, no let
+            const flag: { settled?: true; cleaned?: true } = {};
 
             const settle: (value: T | symbol) => void = (value) => {
-                if (settled) return;
-                settled = true;
+                if (flag.settled) return;
+                flag.settled = true;
 
                 if (value !== OPEN_TUI_CANCEL) {
                     const historyLine = args.formatHistoryLine?.(value as T);
@@ -333,29 +387,37 @@ function createSession(
             const onSigint = () => settle(OPEN_TUI_CANCEL);
 
             const onRendererDestroy = () => {
-                if (settled) return;
-                settled = true;
+                if (flag.settled) return;
+                flag.settled = true;
                 cleanup();
                 resolve(OPEN_TUI_CANCEL);
             };
 
             const cleanup = () => {
-                if (cleanedUp) return;
-                cleanedUp = true;
-                if (activePromptCancel === onSigint) activePromptCancel = undefined;
+                if (flag.cleaned) return;
+                flag.cleaned = true;
+                if (live.cancel === onSigint) live.cancel = undefined;
                 process.off("SIGINT", onSigint);
                 activeRenderer.off(depsDestroyEvent, onRendererDestroy);
-                promptRender = undefined;
-                promptRoot = undefined;
+                // the previous leak: a fresh react root per prompt —
+                // createRoot() registers renderer.once(DESTROY, cleanup)
+                // per root and never lets go, so every submenu round
+                // trip added one irremovable emitter listener →
+                // MaxListenersExceeded. Now the root is shared (born at
+                // initialize, exactly once) — prompts only re-render
+                // and unmount their SUBTREE here, so the idle renderer
+                // sits at the empty shell and nothing accumulates.
+                root.unmount();
+                live.render = undefined;
                 sessionState = "idle";
             };
 
             activeRenderer.on(depsDestroyEvent, onRendererDestroy);
             process.on("SIGINT", onSigint);
-            activePromptCancel = onSigint;
+            live.cancel = onSigint;
             sessionState = "prompt";
 
-            promptRender = () => {
+            live.render = () => {
                 const linesToRender = historyRenderLines();
                 root.render(
                     <OpenTuiPromptShell>
@@ -373,7 +435,7 @@ function createSession(
                 );
             };
 
-            promptRender();
+            live.render();
         });
     }
 
@@ -381,37 +443,43 @@ function createSession(
         if (sessionState === "disposed") return;
         flushHistoryToStdout();
         sessionState = "disposed";
-        promptRender = undefined;
-        promptRoot?.unmount();
-        promptRoot = undefined;
+        live.render = undefined;
+        live.root?.unmount();
+        live.root = undefined;
+        live.cancel = undefined;
         process.off("SIGINT", onSessionSigint);
-        if (!renderer) {
+        process.off("SIGTERM", onSessionTerm);
+        process.off("SIGHUP", onSessionHup);
+        const activeRenderer = live.renderer;
+        if (!activeRenderer) {
             forceRestoreShellTerminalModes();
             return;
         }
 
         try {
-            if (!renderer.isDestroyed) {
+            if (!activeRenderer.isDestroyed) {
                 try {
-                    renderer.suspend();
+                    activeRenderer.suspend();
                 } catch {
                     // Best-effort: suspend may throw if renderer is mid-shutdown.
                 }
-                renderer.currentRenderBuffer.clear();
-                renderer.nextRenderBuffer.clear();
-                renderer.requestRender();
-                await renderer.idle();
+                activeRenderer.currentRenderBuffer.clear();
+                activeRenderer.nextRenderBuffer.clear();
+                activeRenderer.requestRender();
+                await activeRenderer.idle();
             }
 
-            if (!renderer.isDestroyed) renderer.destroy();
+            if (!activeRenderer.isDestroyed) activeRenderer.destroy();
         } finally {
-            renderer = undefined;
-            initializePromise = undefined;
+            live.renderer = undefined;
+            live.init = undefined;
             forceRestoreShellTerminalModes();
         }
     };
 
     process.on("SIGINT", onSessionSigint);
+    process.on("SIGTERM", onSessionTerm);
+    process.on("SIGHUP", onSessionHup);
     process.once("beforeExit", () => {
         if (_session) void _session.dispose().catch(() => {});
     });
@@ -443,6 +511,7 @@ export function session(): OnDeploySession {
 export async function releaseTui(): Promise<void> {
     const s = _session;
     _session = null;
+    sessionState = "unborn";
     if (s) await s.dispose().catch(() => undefined);
 }
 
