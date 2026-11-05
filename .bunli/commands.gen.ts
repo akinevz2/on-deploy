@@ -8,7 +8,7 @@ import Archive from '../src/commands/archive.js'
 import Check from '../src/commands/check.js'
 import Configure from '../src/commands/configure.js'
 import Depends from '../src/commands/depends.js'
-import DetectServer from '../src/commands/detectserver.js'
+import DetectServer from '../src/commands/detect-server.js'
 import Disable from '../src/commands/disable.js'
 import Enable from '../src/commands/enable.js'
 import Install from '../src/commands/install.js'
@@ -93,12 +93,13 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
     },
   'detect-server': {
       name: 'detect-server',
-      description: 'Detect the reachable X server (shared display probe; --persist-to-systemd exports DISPLAY to the user manager)',
+      description: 'Probe a reachable X server and print it; optionally persist DISPLAY to the systemd user session (--persist-to-systemd) or an includeable sh env file (--persist-to-env=<file>). An optional ADDRESS is checked and persisted instead of autodetecting.',
       options: {
-        'persist-to-systemd': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'set DISPLAY in the systemd user manager environment (the single source of truth)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
-        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print what would be persisted, change nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+        'persist-to-systemd': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'set DISPLAY in the systemd --user manager environment (no-op on SysV)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print what would be persisted, change nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'persist-to-env': { type: 'z.string.optional', required: false, hasDefault: false, description: 'write `export DISPLAY=...` to this executable sh file (rc.d-includable)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
       },
-      path: './src/commands/detectserver'
+      path: './src/commands/detect-server'
     },
   'disable': {
       name: 'disable',

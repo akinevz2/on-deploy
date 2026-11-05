@@ -64,13 +64,52 @@ export async function targetPkg(
  *  reachable on the DISPLAY the units use. Unit enablement belongs to
  *  the dots services flow (service.order / package Makefiles). */
 export function verifyWslSession(): Step {
-    const xok = sh("sh", ["-c", "xset -display ${DISPLAY:-localhost:0.0} q"]);
+    const xok = sh("sh", ["-c", 'xset -display "$1" q >/dev/null 2>&1', "-", detectDisplay().display]);
     const ok = xok.code === 0;
     return {
         name: "wsl-session", ok,
         detail: `X ${ok ? "reachable" : "UNREACHABLE"} (${process.env.DISPLAY ?? "localhost:0.0"})`,
         problem: ok ? undefined : "X server unreachable",
     };
+}
+
+/** detectDisplay — probe a REACHABLE X display and export it into the
+ *  process env for every child on-deploy spawns (hooks, package
+ *  Makefiles, service units depend on it).
+ *
+ *  WHY: the WSL2 stack has seen more than one display number
+ *  (localhost:0.0 exclusively, then :1.0 from VcXsrv multiwindow
+ *  re-parenting) — an inherited DEAD $DISPLAY makes X clients HANG
+ *  instead of failing fast (seen with reload_theme "Cannot open
+ *  display"/hung xset under `on-deploy packages install`). A stale
+ *  inherited value is re-tested and discarded like any other probe.
+ *
+ *  Order: $DISPLAY if it answers, then localhost:0.0, localhost:1.0,
+ *  :0, :1; each probe is bounded at 2s. Success rewrites
+ *  process.env.DISPLAY; failure leaves the env untouched and reports
+ *  ok:false — callers treat X-touching steps as unavailable, not
+ *  fatally (headless targets must keep deploying). */
+export function detectDisplay(): { display: string; ok: boolean; probed: string[] } {
+    const xset = sh("sh", ["-c", "command -v xset"]).out;
+    if (!xset) {
+        return { display: process.env.DISPLAY ?? "localhost:0.0", ok: false, probed: [] };
+    }
+    const cands = [
+        ...(process.env.DISPLAY ? [process.env.DISPLAY] : []),
+        "localhost:0.0", "localhost:1.0", ":0", ":1",
+    ];
+    const probed: string[] = [];
+    for (const d of cands) {
+        probed.push(d);
+        // timeout 2 guards a half-open connection (VcXsrv restart
+        // mid-session) that would otherwise hang xset forever
+        const r = sh("timeout", ["2", xset, "q", "-display", d]);
+        if (r.code === 0) {
+            process.env.DISPLAY = d;
+            return { display: d, ok: true, probed };
+        }
+    }
+    return { display: process.env.DISPLAY ?? "localhost:0.0", ok: false, probed };
 }
 
 /** ensureVcxsrv — the WSL stretch: the Windows-side X server. Checks

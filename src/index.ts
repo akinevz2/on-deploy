@@ -38,7 +38,7 @@ import preserveCommand from "./commands/preserve";
 import servicesCommand from "./commands/services";
 import toolchainCommand from "./commands/toolchain";
 import dependsCommand from "./commands/depends";
-import detectServerCommand from "./commands/detectserver";
+import detectServerCommand from "./commands/detect-server";
 
 const argv = process.argv.slice(2);
 if (argv.length === 0) {
@@ -80,6 +80,18 @@ cli.command(servicesCommand);
 cli.command(toolchainCommand);
 cli.command(dependsCommand);
 cli.command(detectServerCommand);
+
+// Auto-detect a reachable X display BEFORE any command runs: every
+// child this CLI spawns (package hooks, preserve, service apply)
+// inherits DISPLAY from the process env. A stale inherited :X would
+// otherwise hang x-bounded hooks for minutes. Failure is silent —
+// headless invocations proceed as before.
+import { detectDisplay } from "./lib/provisioners";
+const inherited = process.env.DISPLAY;
+const _d = detectDisplay();
+if (_d.ok && _d.display !== inherited && process.env.ONDEPLOY_DEBUG) {
+    console.error(`on-deploy: DISPLAY ${inherited ?? "(unset)"} dead? -> ${_d.display}`);
+}
 
 if (compiled) process.chdir(origCwd);
 

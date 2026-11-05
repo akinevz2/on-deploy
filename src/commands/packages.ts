@@ -20,6 +20,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { checkDotsEnv, DOTS_DIR } from "../lib/dots";
 import { printResults, runRule, type PkgResult } from "../lib/pkgops";
+import { readWmPackages } from "../lib/dots";
 import { tuiChecklist, tuiSelect } from "../lib/tui";
 
 
@@ -97,11 +98,27 @@ export default defineCommand({
             return;
         }
         const wanted = rest.length ? rest : available;
+        let targets = wanted.filter((p) => available.includes(p));
+        // A BARE sweep (no explicit names) is scoped to the wm.packages
+        // manifest: the individually deployable packages
+        // (novnc/x11vnc/xrdp/xvfb…) must NOT be swept by bootstrap — their
+        // unstowed user units make every rule fail after installing.
+        // Explicit names always win: `on-deploy packages install novnc`
+        // remains the documented on-demand path.
+        const manifest = readWmPackages();
+        const spared = rule === "install" && !rest.length
+            ? targets.filter((t) => !manifest.includes(t))
+            : [];
+        if (spared.length > 0) {
+            console.log(
+                `packages: skipped (not in wm.packages; install on demand): ${spared.join(" ")}`,
+            );
+            targets = targets.filter((t) => manifest.includes(t));
+        }
         const unknown = wanted.filter((p) => !available.includes(p));
         for (const p of unknown) {
             console.log(`packages: ${p}: no Makefile`);
         }
-        const targets = wanted.filter((p) => available.includes(p));
         // mutating rules get a PURPOSE notice BEFORE running: the rule
         // bodies live in the package Makefiles and may invoke the
         // platform package manager — sudo prompts need their context
