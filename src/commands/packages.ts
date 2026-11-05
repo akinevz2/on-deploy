@@ -21,7 +21,7 @@ import { join } from "node:path";
 import { checkDotsEnv, DOTS_DIR } from "../lib/dots";
 import { printResults, runRule, type PkgResult } from "../lib/pkgops";
 import { readWmPackages } from "../lib/dots";
-import { tuiChecklist, tuiSelect } from "../lib/tui";
+import { releaseTui, tuiChecklist, tuiSelect } from "../lib/tui";
 
 
 export const STANDARD_RULES = [
@@ -69,10 +69,12 @@ export default defineCommand({
                 })),
             );
             if (pick === null) {
+                await releaseTui();
                 console.log("packages: cancelled");
                 return;
             }
             if (pick === "list") {
+                await releaseTui();
                 console.log(`packages: ${available.join(" ")}`);
                 return;
             }
@@ -82,9 +84,13 @@ export default defineCommand({
                 { preselect: available },
             );
             if (sel === null) {
+                await releaseTui();
                 console.log("packages: cancelled");
                 return;
             }
+            // prompt phase over: hand the terminal back to the CLI before
+            // actioning (see tuiRunner.ts — same broken-screen class)
+            await releaseTui();
             const results: PkgResult[] = [];
             for (const pkg of sel) results.push(runRule(pkg, pick));
             printResults(results);

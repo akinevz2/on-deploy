@@ -7,7 +7,7 @@ import {
     hasMakefile, pkgUnits, printResults, runRule, stowPackages, stowPkg,
     unstowPkg, unitsOp, type PkgResult,
 } from "../lib/pkgops";
-import { tuiChecklist } from "../lib/tui";
+import { releaseTui, tuiChecklist } from "../lib/tui";
 
 export type Op = "stow" | "unstow" | "enable" | "disable";
 
@@ -22,6 +22,13 @@ export async function pkgOpTui(op: Op, explicit: string[]): Promise<void> {
             "select packages",
             stowPackages().map((p) => ({ label: p, value: p })),
         );
+        // the selection is settled INSIDE the TUI session; the actioning
+        // happens in plain CLI mode: release the session (flushes the
+        // buffered history to stdout, clears the renderer's buffers and
+        // restores the shell's terminal modes) BEFORE any operation runs
+        // — otherwise the printed results interleave into the still-
+        // painted menu (the broken-screen-on-submit class)
+        await releaseTui();
         if (sel === null) {
             console.log(`${op}: cancelled`);
             return;
