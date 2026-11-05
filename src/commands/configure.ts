@@ -18,7 +18,7 @@ import { z } from "zod";
 import { join } from "node:path";
 import {
     readFileSync, writeFileSync, existsSync, readdirSync,
-    chmodSync, symlinkSync, realpathSync,
+    chmodSync, realpathSync,
 } from "node:fs";
 import { checkDotsEnv, DOTS_DIR, readRequires } from "../lib/dots";
 import { readLine } from "../lib/lines";
@@ -130,11 +130,14 @@ function writeCredentials(name: string, email: string): string[] {
     const notes: string[] = [];
     writeFileSync(CRED_REPO, `${name}\n${email}\n`);
     try { chmodSync(CRED_REPO, 0o600); } catch { /* best-effort */ }
-    // ~/.my-credentials must expose the repo file; create the stow
-    // link when absent (stow owns it afterwards)
+    // ~/.my-credentials must end up as a STOW-OWNED link (from the
+    // shell package); never create it here — an absolute symlink from
+    // this code made stow fail with "existing target is not owned by
+    // stow: .my-credentials" on the next `make wm/update`. Only warn
+    // when the path exists and ISN'T the repo file (fresh machines
+    // with nothing at the path: stow shell creates the link later).
     if (!existsSync(CRED_HOME)) {
-        symlinkSync(CRED_REPO, CRED_HOME);
-        notes.push(`linked ${CRED_HOME} -> ${CRED_REPO}`);
+        notes.push("no ~/.my-credentials link yet — 'make wm' (shell package) creates the stow link");
     } else if (realpathSync(CRED_HOME) !== realpathSync(CRED_REPO)) {
         notes.push("WARNING: ~/.my-credentials is not a link into dots/shell — stow the shell package");
     }
