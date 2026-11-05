@@ -8,6 +8,7 @@ import Archive from '../src/commands/archive.js'
 import Check from '../src/commands/check.js'
 import Configure from '../src/commands/configure.js'
 import Depends from '../src/commands/depends.js'
+import DetectServer from '../src/commands/detectserver.js'
 import Disable from '../src/commands/disable.js'
 import Enable from '../src/commands/enable.js'
 import Install from '../src/commands/install.js'
@@ -22,7 +23,7 @@ import Unarchive from '../src/commands/unarchive.js'
 import Unstow from '../src/commands/unstow.js'
 
 // Narrow list of command names to avoid typeof-cycles in types
-const names = ['archive', 'check', 'configure', 'depends', 'disable', 'enable', 'install', 'packages', 'pkg', 'preserve', 'search', 'services', 'stow', 'toolchain', 'unarchive', 'unstow'] as const
+const names = ['archive', 'check', 'configure', 'depends', 'detect-server', 'disable', 'enable', 'install', 'packages', 'pkg', 'preserve', 'search', 'services', 'stow', 'toolchain', 'unarchive', 'unstow'] as const
 type GeneratedNames = typeof names[number]
 
 const modules: Record<GeneratedNames, Command<any>> = {
@@ -30,6 +31,7 @@ const modules: Record<GeneratedNames, Command<any>> = {
   'check': Check,
   'configure': Configure,
   'depends': Depends,
+  'detect-server': DetectServer,
   'disable': Disable,
   'enable': Enable,
   'install': Install,
@@ -88,6 +90,15 @@ const metadata: Record<GeneratedNames, GeneratedCommandMeta> = {
         'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'report what would run, change nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
       },
       path: './src/commands/depends'
+    },
+  'detect-server': {
+      name: 'detect-server',
+      description: 'Detect the reachable X server (shared display probe; --persist-to-systemd exports DISPLAY to the user manager)',
+      options: {
+        'persist-to-systemd': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'set DISPLAY in the systemd user manager environment (the single source of truth)', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' },
+        'dry-run': { type: 'z.boolean.optional', required: false, hasDefault: false, description: 'print what would be persisted, change nothing', schema: {"type":"zod","method":"optional","args":[]}, validator: '(val) => true' }
+      },
+      path: './src/commands/detectserver'
     },
   'disable': {
       name: 'disable',

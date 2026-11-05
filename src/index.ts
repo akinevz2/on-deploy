@@ -17,6 +17,9 @@
 //   depends   — sync the dots submodules + drive the per-package
 //               dots/<pkg>/.local/state/depends/<pkg>.Makefile rules
 //               (build/install depth).
+//   detect-server — the shared X display probe; --persist-to-systemd
+//               exports DISPLAY to the systemd user manager (the
+//               single place DISPLAY is decided — no unit hardcodes it).
 
 import { createCLI } from "@bunli/core";
 import installCommand, { walk } from "./commands/install";
@@ -35,6 +38,7 @@ import preserveCommand from "./commands/preserve";
 import servicesCommand from "./commands/services";
 import toolchainCommand from "./commands/toolchain";
 import dependsCommand from "./commands/depends";
+import detectServerCommand from "./commands/detectserver";
 
 const argv = process.argv.slice(2);
 if (argv.length === 0) {
@@ -75,6 +79,7 @@ cli.command(preserveCommand);
 cli.command(servicesCommand);
 cli.command(toolchainCommand);
 cli.command(dependsCommand);
+cli.command(detectServerCommand);
 
 if (compiled) process.chdir(origCwd);
 
