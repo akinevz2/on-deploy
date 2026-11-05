@@ -8,8 +8,12 @@
 //
 // Steps:
 //   1. SYNC — `git submodule sync` + `git submodule update --init
-//      --recursive --remote` inside ~/dots (the established doctrine:
-//      the checkouts ride at their remote tips). --no-sync skips the
+//      --recursive` inside ~/dots (PINNED doctrine, 2026-11: the
+//      nested asset submodules — bat themes/syntaxes and co. — are
+//      updated by UPSTREAM, not chased per machine; the plain update
+//      uses the RECORDED pins, so remotes never re-pull sub-submodule
+//      churn; `git submodule update --remote` bumps a checkout BY
+//      HAND when a pinned tree is to be advanced). --no-sync skips the
 //      git phase (re-running builds without touching the checkouts).
 //   2. DRIVE — every stow package that ships the per-package Makefile
 //      dots/<pkg>/.local/state/depends/<pkg>.Makefile gets the rule the
@@ -87,15 +91,19 @@ export default defineCommand({
         const dry = !!flags["dry-run"];
         const noSync = !!flags["no-sync"];
 
-        // 1) SYNC — the submodule checkouts at their remote tips
+        // 1) SYNC — the submodule checkouts at their RECORDED pins
+        // (pinned doctrine: nested asset submodules — e.g. bat's
+        // themes/syntaxes — are updated by UPSTREAM, not chased per
+        // machine; remotes never re-pull sub-submodule churn.
+        // `git submodule update --remote` must be run BY HAND to bump)
         if (!noSync) {
             if (dry) {
-                console.log("  [dry-run] git submodule sync && git submodule update --init --recursive --remote");
+                console.log("  [dry-run] git submodule sync && git submodule update --init --recursive");
             } else {
                 console.log("depends: git submodule sync");
                 if (shInherit(["git", "submodule", "sync"], DOTS_DIR) !== 0) process.exit(1);
-                console.log("depends: git submodule update --init --recursive --remote");
-                if (shInherit(["git", "submodule", "update", "--init", "--recursive", "--remote"], DOTS_DIR) !== 0) {
+                console.log("depends: git submodule update --init --recursive (recorded pins)");
+                if (shInherit(["git", "submodule", "update", "--init", "--recursive"], DOTS_DIR) !== 0) {
                     console.error("depends: submodule update FAILED");
                     process.exit(1);
                 }
