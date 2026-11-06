@@ -42,12 +42,22 @@ function flushEof(): void {
 function attach(): void {
     process.stdin.on("data", (chunk: Uint8Array | string) => {
         let buf = typeof chunk === "string" ? chunk : dec.decode(chunk);
-        let i = buf.indexOf("\n");
-        while (i >= 0) {
-            deliver(buf.slice(0, i));
-            buf = buf.slice(i + 1);
-            i = buf.indexOf("\n");
+        let i = 0;
+        // terminate on \n OR \r (RAW-MODE compat: a bare CR is what
+        // Enter delivers with the TUI renderer's raw mode still
+        // set on the terminal — waiting for \n there was the confirm
+        // freeze). A CRLF pair is ONE line, never two.
+        for (;;) {
+            const nl = buf.indexOf("\n", i);
+            const cr = buf.indexOf("\r", i);
+            const at = (nl < 0 ? cr : cr < 0 ? nl : Math.min(nl, cr));
+            if (at < 0) break;
+            deliver(buf.slice(i, at));
+            // \r\n consumed as a single terminator
+            if (buf[at] === "\r" && buf[at + 1] === "\n") i = at + 2;
+            else i = at + 1;
         }
+        buf = buf.slice(i);
         // a trailing line without its newline: buffered; delivered ONLY
         // at EOF (interactive terminals flush it on Enter via the \n)
         trailing = buf.length > 0 ? buf : trailing;
