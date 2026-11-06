@@ -14,7 +14,7 @@
 // NO package names and NO per-package behavior live here (or anywhere
 // in on-deploy): the package GROUPS (X server stack, nested stack,
 // xrdp, greeter) are implemented in the package Makefiles
-// (dots/<pkg>/.local/share/<pkg>/Makefile, bash), which defer to
+// (the depends Makefile, bash), which defer to
 // `on-deploy pkg ...` for the package-manager operations.
 
 import { ensureVcxsrv, verifyWslSession, type Step } from "./provisioners";

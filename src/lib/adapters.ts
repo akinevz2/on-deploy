@@ -11,7 +11,7 @@
 //     git_repo=<url>          the upstream repository (the sources)
 //     pkg_name=<name>         the submodule package name; the checkout
 //                             path is INFERRED as
-//                             dots/<pkg>/.local/share/<pkg_name>
+//                             dots/build/<pkg>/<pkg_name>
 //     methods_supported=<s>   the valid method set ("source" is always
 //                             valid; bat keeps its release route)
 //     repos_pkg=<name>        the dots package (stow) name
@@ -86,10 +86,10 @@ function safePkgName(raw: Record<string, string>, fallback: string): string {
     return raw.pkg_name || fallback;
 }
 
-/** the checkout path is INFERRED from pkg_name:
- *  dots/<pkg>/.local/share/<pkg_name> */
+/** the checkout path is INFERRED from pkg_name — the BUILD SLED,
+ *  outside the stow packages: dots/build/<pkg>/<pkg_name> */
 function safeSubDir(pkg: string, pkgName: string): string | undefined {
-    return pkgName ? join(pkg, ".local", "share", pkgName) : undefined;
+    return pkgName ? join("build", pkg, pkgName) : undefined;
 }
 
 /** the package-owned artifact lives at the well-known dots link path */

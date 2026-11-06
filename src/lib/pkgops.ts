@@ -30,7 +30,7 @@ export function stowPackages(): string[] {
  *     hosts its submodules' build/link/install recipes; run with -f)
  * or, as a fallback for packages NOT yet migrated (e.g. polybar's
  * bar-control Makefile), the legacy hook directory:
- *   dots/<pkg>/.local/share/<pkg>/Makefile
+ *   dots/<pkg>/.local/state/depends/<pkg>.Makefile
  * Returns { dir, file } where dir is the `make -C` cwd and file the
  * repo-relative makefile to run.
  */
