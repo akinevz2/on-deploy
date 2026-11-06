@@ -98,11 +98,11 @@ export default defineCommand({
         // `git submodule update --remote` must be run BY HAND to bump)
         if (!noSync) {
             if (dry) {
-                console.log("  [dry-run] git submodule sync && git submodule update --init --recursive");
+                console.log("  [dry] submodule sync+pins");
             } else {
-                console.log("depends: git submodule sync");
+                console.log("depends: submodule sync");
                 if (shInherit(["git", "submodule", "sync"], DOTS_DIR) !== 0) process.exit(1);
-                console.log("depends: git submodule update --init --recursive (recorded pins)");
+                console.log("depends: submodule pins");
                 if (shInherit(["git", "submodule", "update", "--init", "--recursive"], DOTS_DIR) !== 0) {
                     console.error("depends: submodule update FAILED");
                     process.exit(1);
@@ -119,7 +119,7 @@ export default defineCommand({
             .filter((p) => depsMakefile(p) !== null)
             .sort();
         for (const p of Object.keys(subs)) {
-            if (!depsMakefile(p)) console.log(`depends: ${p}: listed in system.required but has no depends Makefile`);
+            if (!depsMakefile(p)) console.log(`depends: ${p}: no Makefile`);
         }
         if (flags.only) {
             const wanted = flags.only.split(/[,\s]+/).filter(Boolean);
@@ -133,18 +133,18 @@ export default defineCommand({
             for (const pkg of targets) {
                 console.log(`  ${pkg.padEnd(12)} <- ${(subs[pkg] ?? ["(no submodules)"]).join(" ")}`);
             }
-            console.log(`depends: rerun with --build (sync+build) or --install (sync+build+install)` +
-                ` — --only narrows, --force passes FORCE=1 to the Makefiles`);
+            console.log(`depends: rerun --build|-b or --install|-i` +
+                ` (the subwalk depth)`);
             return;
         }
 
         console.log(
-            `depends: ${mode} on ${targets.join(" ") || "(none)"} — ` +
-            `driving each package's ${mode} rule from dots/<pkg>/.local/state/depends/<pkg>.Makefile` +
-            ` (${noSync ? "no sync" : "synced"}${dry ? ", dry-run" : ""})`,
+            `depends: ${mode} ${targets.join(" ") || "(none)"}` +
+            ` — per-pkg Makefile${noSync ? ", no sync" : ", synced"}` +
+            `${dry ? ", dry" : ""}`,
         );
         if (dry) {
-            for (const pkg of targets) console.log(`    [dry-run] make -C dots/${pkg} -f .local/state/depends/${pkg}.Makefile ${mode}`);
+            for (const pkg of targets) console.log(`  [dry] make ${pkg} ${mode}`);
             return;
         }
         const makeVars = flags.force ? ["FORCE=1"] : [];
