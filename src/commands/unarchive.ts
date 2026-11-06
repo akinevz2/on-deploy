@@ -13,10 +13,11 @@ import { unarchivePackage } from "../lib/defaults";
 export default defineCommand({
     name: "unarchive",
     description:
-        "Restore a stow package's defaults/ backups into $HOME (skips dots-owned paths)",
+        "Restore stowed old user package defaults/ backups into $HOME",
     options: {
-        "dry-run": option(z.boolean().optional(), { argumentKind: "flag" as const,
-            description: "list what would be restored, copy nothing",
+        "dry-run": option(z.boolean().optional(), {
+            argumentKind: "flag" as const,
+            description: "display contents, perform no-op",
         }),
     },
     handler: async ({ flags, positional }) => {

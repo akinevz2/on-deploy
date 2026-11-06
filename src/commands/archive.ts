@@ -14,10 +14,11 @@ import { archivePackage } from "../lib/defaults";
 export default defineCommand({
     name: "archive",
     description:
-        "Back up the current (not dots-owned) $HOME files of a stow package into ~/dots/defaults/",
+        "Back up the your current config files\nto stow package ~/dots/defaults/",
     options: {
-        "dry-run": option(z.boolean().optional(), { argumentKind: "flag" as const,
-            description: "list what would be collected, copy nothing",
+        "dry-run": option(z.boolean().optional(), {
+            argumentKind: "flag" as const,
+            description: "display collection targets, perform no-op",
         }),
     },
     handler: async ({ flags, positional }) => {

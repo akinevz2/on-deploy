@@ -51,7 +51,7 @@ const TOOLCHAINS: Record<string, Toolchain> = {
         probe: "rustup",
         packages: ["rustup"],
         post: ["rustc", "cargo"],
-        postFix: "rustup default stable  # installs the default toolchain",
+        postFix: "rustup default stable  # install toolchain",
     },
 };
 
@@ -72,13 +72,13 @@ async function platformInstall(
         }
         if (!yes && !isInteractive()) {
             console.error(
-                `toolchain: non-interactive terminal without --yes — ` +
-                `the install of '${pkg}' may prompt (sudo). Re-run with --yes (or interactively).`,
+                `toolchain: the install of '${pkg}' may prompt (sudo).` +
+                `toolchain: Re-run with --yes (or interactively).`,
             );
             process.exit(1);
         }
         if (!yes) {
-            const ok = await confirm(`         install ${toolchain.probe} via ${res.pkg}? [Y/n] `);
+            const ok = await confirm(`\tinstall ${toolchain.probe} via ${res.pkg}? [Y/n] `);
             if (ok === "abort") {
                 console.error("         EOF (ctrl-d): stopped");
                 process.exit(130);
@@ -137,8 +137,7 @@ async function ensure(
     // a) present?
     if (installed(toolchain.probe)) {
         const ver = Bun.spawnSync([toolchain.probe, "--version"], { stdout: "pipe" });
-        console.log(`  ${toolchain.probe.padEnd(10)} present (${
-            `${ver.stdout ?? ""}`.trim().split("\n")[0] ?? ""})`);
+        console.log(`  ${toolchain.probe.padEnd(10)} present (${`${ver.stdout ?? ""}`.trim().split("\n")[0] ?? ""})`);
         if (toolchain.post.length === 0) return;
         const missing = toolchain.post.filter((b) => !installed(b));
         if (missing.length === 0) return;
@@ -196,21 +195,26 @@ export default defineCommand({
     description:
         "Install/verify a language toolchain the per-package Makefiles build with (--bun | --rustup); --check fail-fasts",
     options: {
-        bun: option(z.boolean().optional(), { argumentKind: "flag" as const,
+        bun: option(z.boolean().optional(), {
+            argumentKind: "flag" as const,
             description: "ensure the bun toolchain (bunli/bun builds)",
         }),
-        rustup: option(z.boolean().optional(), { argumentKind: "flag" as const,
+        rustup: option(z.boolean().optional(), {
+            argumentKind: "flag" as const,
             description: "ensure the rust toolchain manager (rustc/cargo via rustup)",
         }),
-        check: option(z.boolean().optional(), { argumentKind: "flag" as const,
+        check: option(z.boolean().optional(), {
+            argumentKind: "flag" as const,
             description: "verify only — absent toolchain fails fast, installs NOTHING",
             short: "c",
         }),
-        yes: option(z.boolean().optional(), { argumentKind: "flag" as const,
+        yes: option(z.boolean().optional(), {
+            argumentKind: "flag" as const,
             description: "no confirmations (non-interactive)",
             short: "y",
         }),
-        "dry-run": option(z.boolean().optional(), { argumentKind: "flag" as const,
+        "dry-run": option(z.boolean().optional(), {
+            argumentKind: "flag" as const,
             description: "resolve + report, run nothing",
         }),
     },
