@@ -17,12 +17,13 @@ import { resolvePackage } from "../lib/deployScript";
 export default defineCommand({
     name: "search",
     description:
-        "Resolve the providing package of required binaries in the target repositories (read-only)",
+        "Resolve the package that provides given binaries on your system",
     options: {
         only: option(z.string().optional(), {
             description: "comma/space-separated subset of binaries to search",
         }),
-        all: option(z.boolean().optional(), { argumentKind: "flag" as const,
+        all: option(z.boolean().optional(), {
+            argumentKind: "flag" as const,
             description: "search EVERY binary, including installed ones",
             short: "a",
         }),

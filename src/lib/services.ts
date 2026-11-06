@@ -48,7 +48,7 @@ export function runServicesAction(action: ServicesAction, units: string[]): numb
         failed += run("systemctl --user daemon-reload");
         for (const unit of units) {
             const code = run(`systemctl --user enable --now --no-block ${unit}`);
-            if (code !== 0) console.error(`services: failed to enable ${unit}`);
+            if (code !== 0) console.error(`services: failed to enable, ${unit}`);
             failed += Math.min(code, 1);
         }
         console.log(`services: enabled: ${units.join(" ")}`);

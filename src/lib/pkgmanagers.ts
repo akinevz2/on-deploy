@@ -32,7 +32,7 @@
 //     fail-fasts with the spec's `missing` note when it fails.
 //   - run() returns the process exit code; dry-run must print and return 0.
 //   - interactive confirmations belong to the caller (the managed verb
-//     carries the --yes / tty gate); specs run sudo the way provisioners
+//     carries the --force / tty gate); specs run sudo the way provisioners
 //     .ts does when they need it.
 //   - no spec ever hardcodes a dots package name: names come from the
 //     caller exactly like the pkg verb.

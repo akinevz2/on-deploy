@@ -29,7 +29,7 @@ export default defineCommand({
     description:
         "Generic package operations on the given names (installed|search|install|remove) via the deploy target package manager",
     options: {
-        yes: option(z.boolean().optional(), { argumentKind: "flag" as const,
+        force: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "no confirmations (non-interactive)",
             short: "y",
         }),

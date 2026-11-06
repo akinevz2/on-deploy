@@ -492,7 +492,7 @@ export default defineCommand({
         }
         if (flags.session) {
             if (!SESSIONS.includes(flags.session)) {
-                console.error(`configure: unknown session '${flags.session}' (${SESSIONS.join("|")})`);
+                console.error(`configure: unknown session, ${flags.session} (valid: ${SESSIONS.join("|")})`);
                 process.exit(2);
             }
             writeSession(flags.session);
@@ -520,12 +520,13 @@ export default defineCommand({
                 const pkg = spec.split(":", 1)[0];
                 let path = spec.slice(pkg.length + 1);
                 if (!path) {
-                    console.error(`configure: add-subs needs pkg:path — '${spec}' has no path`);
+                    console.error(`configure: add-subs needs pkg:path, no path in ${spec}`);
                     process.exit(2);
                 }
                 path = path.replace(/^dots\//, "");
                 if (!existsSync(join(DOTS_DIR, path))) {
-                    console.error(`configure: submodule path '${path}' does not exist in the dots checkout`);
+                    console.error("configure: submodule path does not exist in the dots checkout,");
+                console.error(`configure: ${path}`);
                     process.exit(2);
                 }
                 const existing = s.entries.find((e) => e.pkg === pkg);

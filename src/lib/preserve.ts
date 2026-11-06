@@ -270,7 +270,7 @@ export interface PreserveSeams {
 
 export interface PreserveOptions {
     dryRun: boolean;
-    /** -y/--yes: skip prompts, apply the default (keep) branch */
+    /** -f/--force: skip prompts, apply the default (keep) branch */
     yes: boolean;
     /** skip prompt, keep the deployed content */
     keep: boolean;

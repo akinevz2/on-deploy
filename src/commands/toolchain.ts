@@ -78,7 +78,7 @@ async function platformInstall(
 			return "(<dry-run>)";
 		}
 		if (!yes && !isInteractive()) {
-			console.error("toolchain: re-run with --yes, or run interactively");
+			console.error("toolchain: re-run with --force, or run interactively");
 			console.error(`absent:\t${res.pkg} (not yet on the system)`);
 			console.error("the platform install may prompt for the root password");
 			process.exit(1);
@@ -109,7 +109,7 @@ async function rustupPost(
 		return 0;
 	}
 	if (!yes && !isInteractive()) {
-		console.error("toolchain: run the fix interactively, or re-run with --yes");
+		console.error("toolchain: run the fix interactively, or re-run with --force");
 		console.error(`absent:\t${absent.join("\t")}`);
 		console.error("the fix downloads a full rust toolchain");
 		return 1;
@@ -220,10 +220,10 @@ export default defineCommand({
 			description: "verify only — absent toolchain fails fast, installs NOTHING",
 			short: "c",
 		}),
-		yes: option(z.boolean().optional(), {
+		force: option(z.boolean().optional(), {
 			argumentKind: "flag" as const,
 			description: "no confirmations (non-interactive)",
-			short: "y",
+			short: "f",
 		}),
 		"dry-run": option(z.boolean().optional(), {
 			argumentKind: "flag" as const,
@@ -238,6 +238,6 @@ export default defineCommand({
 			process.exit(2);
 		}
 		const key = keys[0];
-		await ensure(key, TOOLCHAINS[key], !!flags.check, !!flags["dry-run"], !!flags.yes);
+		await ensure(key, TOOLCHAINS[key], !!flags.check, !!flags["dry-run"], !!flags.force);
 	},
 });

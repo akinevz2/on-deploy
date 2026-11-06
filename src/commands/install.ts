@@ -1,10 +1,10 @@
 // src/commands/install.ts — verb (c): install missing required binaries
 // from the target repositories. For every MISSING binary: resolve the
-// package (search), show the install command, confirm (unless --yes),
+// package (search), show the install command, confirm (unless --force),
 // run it with inherited stdio (sudo may prompt), then RE-VERIFY — a
 // binary still missing after its install command is a hard failure.
 // For every MISSING binary: resolve the package, show the install
-// command, confirm (unless --yes), run it with inherited stdio
+// command, confirm (unless --force), run it with inherited stdio
 // (sudo may prompt), then RE-VERIFY — a binary still missing after
 // its install command is a hard failure for the run.
 
@@ -21,12 +21,12 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
     const requires = await readRequires();
     const target = requires.target;
     console.log(`target: ${target} (wm.required)`);
-    // fail fast instead of hanging: a non-interactive run without --yes
+    // fail fast instead of hanging: a non-interactive run without --force
     // can never answer the per-binary confirmations
     if (!dryRun && !yes && !isInteractive() && missing(requires.binaries).length > 0) {
         console.error(
-            "deploy: non-interactive terminal without --yes — " +
-            "the confirmation prompts would hang. Re-run with --yes " +
+            "install: aborting, non-interactive without --force — " +
+            "install: the confirmation prompts would hang, re-run with --force" +
             "(or interactively).",
         );
         return 1;
@@ -52,18 +52,18 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
         if (!yes) {
             const ok = await confirm(`         install ${res.pkg}? [Y/n] `);
             if (ok === "abort") {
-                console.error(`         EOF (ctrl-d): stopped — ${binary} unresolved`);
+                console.error(`install: stopped, EOF (ctrl-d), ${binary} unresolved`);
                 process.exit(130);
             }
             if (ok === "no") {
-                console.error(`         skipped — ${binary} stays missing`);
+                console.error(`install: skipped, ${binary} stays missing`);
                 failed += 1;
                 continue;
             }
         }
         const inst = await runInstall(target, binary);
         if (!inst.ok) {
-            console.error(`         FAILED: ${inst.problem ?? inst.command}`);
+            console.error(`install: FAILED, ${inst.problem ?? inst.command}`);
             failed += 1;
             continue;
         }
@@ -71,8 +71,8 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
         if (installed(binary)) {
             console.log(`         installed: ${inst.command}`);
         } else {
-            console.error(`         FAILED: ${binary} still absent`);
-            console.error(`         ran: ${inst.command}`);
+            console.error(`install: FAILED, ${binary} still absent`);
+            console.error(`install: ran, ${inst.command}`);
             failed += 1;
         }
     }
@@ -84,7 +84,7 @@ export default defineCommand({
     description:
         "Install missing required binaries from the target repositories (search + install + re-verify)",
     options: {
-        yes: option(z.boolean().optional(), { argumentKind: "flag" as const,
+        force: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "install without confirmation (non-interactive)",
             short: "y",
         }),
@@ -102,7 +102,7 @@ export default defineCommand({
             process.exit(2);
         }
         const failed = await walk(
-            !!flags.yes, !!flags["dry-run"],
+            !!flags.force, !!flags["dry-run"],
             flags.only?.split(/[,\s]+/).filter(Boolean),
         );
         if (failed > 0) {

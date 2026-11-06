@@ -8,7 +8,7 @@
 //   on-deploy services restart    restart each unit
 //   on-deploy services status     is-active per unit
 //
-// Non-interactive runs REQUIRE --yes (start/stop/restart confirm on a
+// Non-interactive runs REQUIRE --force (start/stop/restart confirm on a
 // tty; nothing hangs on stdin). NO package knowledge: the unit list
 // comes entirely from services.required (the runner lives in
 // lib/services.ts, shared with the `deploy` menu).
@@ -24,9 +24,11 @@ import {
 export default defineCommand({
     name: "services",
     description:
-        "Run services.required units: check|start|stop|restart|status (systemd --user, --no-block, stow-safe disable)",
+        "Control services.required units via systemd:\n"
+        + "check|start|stop|restart|statu ",
     options: {
-        yes: option(z.boolean().optional(), { argumentKind: "flag" as const,
+        force: option(z.boolean().optional(), {
+            argumentKind: "flag" as const,
             description: "no confirmation (non-interactive)",
             short: "y",
         }),
@@ -39,23 +41,23 @@ export default defineCommand({
         }
         const action = (positional[0] ?? "") as ServicesAction;
         if (!SERVICES_ACTIONS.includes(action)) {
-            console.error(`services: usage: on-deploy services <${SERVICES_ACTIONS.join("|")}> [--yes]`);
+            console.error(`services: usage: on-deploy services <${SERVICES_ACTIONS.join("|")}> [--force]`);
             process.exit(2);
         }
         const order = readServiceOrder();
         if (order.length === 0) {
-            console.error("services: empty or missing services.required");
+            console.error("services: services.required is empty or missing");
             process.exit(2);
         }
         const units = unitify(order);
-        const yes = !!flags.yes;
+        const force = !!flags.force;
 
         // confirm on interactive terminals for start/stop/restart — the
-        // Makefile may need to run these non-interactively, so --yes
-        // bypasses; non-tty without --yes aborts (nothing hangs)
-        if ((action === "start" || action === "stop" || action === "restart") && !yes) {
+        // Makefile may need to run these non-interactively, so --force
+        // bypasses; non-tty without --force aborts (nothing hangs)
+        if ((action === "start" || action === "stop" || action === "restart") && !force) {
             if (!process.stdin.isTTY) {
-                console.error("services: non-interactive without --yes — aborting");
+                console.error("services: aborting, non-interactive without --force");
                 process.exit(1);
             }
             console.log(`services: ${units.join(" ")}`);

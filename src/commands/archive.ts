@@ -29,7 +29,7 @@ export default defineCommand({
         }
         const pkg = positional[0] ?? "";
         if (!pkg || !existsSync(join(DOTS_DIR, pkg, ".local"))) {
-            console.error(`archive: not a stow package: ${pkg}`);
+            console.error(`archive: not a stow package, ${pkg}`);
             console.error("archive: usage: on-deploy archive <pkg>");
             process.exit(2);
         }

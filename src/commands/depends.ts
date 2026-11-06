@@ -104,7 +104,7 @@ export default defineCommand({
                 if (shInherit(["git", "submodule", "sync"], DOTS_DIR) !== 0) process.exit(1);
                 console.log("depends: git submodule update --init --recursive (recorded pins)");
                 if (shInherit(["git", "submodule", "update", "--init", "--recursive"], DOTS_DIR) !== 0) {
-                    console.error("depends: submodule update FAILED");
+                    console.error("depends: submodule update FAILED, see the git output above");
                     process.exit(1);
                 }
             }

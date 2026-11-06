@@ -73,7 +73,7 @@ export interface TargetPkgRequest {
     pkgMgr: PkgManagerId;
     op: PkgOpKind;
     names: string[];
-    /** interactive confirmations gate (the caller owns --yes) */
+    /** interactive confirmations gate (the caller owns --force) */
     dry: boolean;
 }
 
@@ -183,7 +183,7 @@ export function detectDisplay(): { display: string; ok: boolean; probed: string[
  *  when absent, fetches the latest installer from the SourceForge
  *  release API and runs it silently (InnoSetup /VERYSILENT) through
  *  WSL interop. Gated: dry-run reports only; the explicit run needs
- *  the caller's confirm/--yes. deploy target code (the external X server
+ *  the caller's confirm/--force. deploy target code (the external X server
  *  of the wsl-systemd deployment model), not package management. */
 export async function ensureVcxsrv(
     yes: boolean, dryRun: boolean,

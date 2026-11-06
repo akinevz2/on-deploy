@@ -24,7 +24,7 @@
 //       whole-package adopt-flow ("mine wins"): `stow -R --adopt`
 //         moves $HOME contents into the package tree. A clean worktree
 //         is REQUIRED (clean HEAD = the restore point).
-//   flags: --dry-run --yes/-y --keep --restore --store <dir>
+//   flags: --dry-run --force/-y --keep --restore --store <dir>
 //
 // The store is XDG state (see lib/preserve.ts for the layout), outside
 // the repo. Nothing here is per-package: all behaviors are keyed off
@@ -182,7 +182,7 @@ export default defineCommand({
         "dry-run": option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "print the plan per package, change nothing",
         }),
-        yes: option(z.boolean().optional(), { argumentKind: "flag" as const,
+        force: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "assume yes (non-interactive; default is keep)",
             short: "y",
         }),
@@ -213,7 +213,7 @@ export default defineCommand({
         if (flags.only) pkgs = flags.only.split(/[,\s]+/).filter(Boolean);
         if (pkgs.length === 0) {
             if (!process.stdin.isTTY) {
-                console.error("preserve: no packages and no tty");
+                console.error("preserve: no packages given, and no tty");
                 console.error("preserve: usage: on-deploy preserve <pkg>|--only <pkgs> [--adopt] [--restore] [--keep] [--dry-run]");
                 process.exit(2);
             }
@@ -231,7 +231,7 @@ export default defineCommand({
 
         const opts: PreserveOptions = {
             dryRun: !!flags["dry-run"],
-            yes: !!flags.yes,
+            yes: !!flags.force,
             keep: !!flags.keep,
             restore: !!flags.restore,
             adopt: !!flags.adopt,
@@ -243,10 +243,9 @@ export default defineCommand({
         const interactive =
             process.stdin.isTTY &&
             process.stdout.isTTY &&
-            !flags.yes && !flags.keep && !flags.restore && !flags.adopt && !flags["dry-run"];
-        let worst = 0;
+            !flags.force && !flags.keep && !flags.restore && !flags.adopt && !flags["dry-run"];
         if (interactive) {
-            worst = await resolveInteractive(pkgs, opts);
+            const worst = await resolveInteractive(pkgs, opts);
             process.exit(worst);
         }
         console.log(
@@ -262,8 +261,11 @@ export default defineCommand({
         const targets = pkgs.filter((p) => known.includes(p));
         if (unknown.length > 0 && targets.length === 0) process.exit(2);
         const isTTY = !!process.stdin.isTTY;
-        for (const pkg of targets) {
-            const result = await preservePackage(pkg, opts, {
+        // the packages run CONCURRENTLY: Promise.all over the frozen
+        // opts (the ask hook is shared; each preserve call resolves its
+        // own prompt when the TTY allows it)
+        const results = await Promise.all(
+            targets.map((pkg) => preservePackage(pkg, opts, {
                 ask: async () => {
                     if (!isTTY) return false; // default: keep
                     const ok = await confirm(
@@ -275,11 +277,13 @@ export default defineCommand({
                     }
                     return ok === "yes";
                 },
-            }, DOTS_DIR);
+            }, DOTS_DIR)),
+        );
+        for (const result of results) {
             for (const l of result.lines) console.log(l);
-            if (result.code > worst) worst = result.code;
         }
-        process.exit(worst);
+        const worstRest = results.reduce((w, r) => Math.max(w, r.code), 0);
+        process.exit(worstRest);
     },
 });
 
