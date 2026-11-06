@@ -51,57 +51,19 @@ if (argv.length === 0) {
     process.exit(failed > 0 ? 1 : 0);
 }
 
-// `help` as a standalone alias for --help (bunli has no built-in
-// help command; translate before the CLI parses): `help` -> --help,
-// `help <cmd>` -> <cmd> --help
-// `help` as a standalone command — and bare `--help` — are OURS now:
-// bunli's built-in renderer runs before any handler and ignores the
-// terminal width (the WIDTH CONTRACT bypass noted in lib/lines.ts).
-// The root surface renders here with the SAME width-aware helpers the
-// per-verb help groups use; `help <cmd>` still delegates to the verb
-// group's own help (each command renders its own width-aware usage).
-const ROOT_HELP_ENTRIES: [string, { description: string }][] = [
-    ["install", installCommand],
-    ["check", checkCommand],
-    ["search", searchCommand],
-    ["pkg", pkgCommand],
-    ["stow", stowCommand],
-    ["unstow", unstowCommand],
-    ["enable", enableCommand],
-    ["disable", disableCommand],
-    ["configure", configureCommand],
-    ["archive", archiveCommand],
-    ["unarchive", unarchiveCommand],
-    ["packages", packagesCommand],
-    ["preserve", preserveCommand],
-    ["services", servicesCommand],
-    ["toolchain", toolchainCommand],
-    ["depends", dependsCommand],
-    ["detect-server", detectServerCommand],
-    ["managed", managedCommand],
-    ["supports", supportsCommand],
-];
-if (argv.length === 1 && (argv[0] === "help" || argv[0] === "--help" || argv[0] === "-h")) {
-    const { echoHelpList, wrapHelp } = await import("./lib/lines");
-    console.log(`on-deploy ${pkg.version}`);
-    for (const line of wrapHelp(pkg.description)) console.log(`  ${line}`);
-    console.log("");
-    echoHelpList(
-        "on-deploy",
-        "usage: on-deploy <verb> [args]   (help <verb> for the group; bare run = the deploy contract)",
-        ROOT_HELP_ENTRIES.map(([name, cmd]) =>
-            `${name}\t${cmd.description.replaceAll("\n", " ")}`),
-    );
-    process.exit(0);
-}
-
-if (argv[0] === "help") {
+// `help` rewrites argv to bunli's own help surface (the herbstutil
+// simplicity: bunli renders, nothing is hand-printed here):
+//   help        -> --help
+//   help <cmd>  -> <cmd> --help
+//   <cmd> help  -> <cmd> --help   (the verb's own group keeps this shape)
+//   --help/-h   -> handled by bunli
+if (argv[0] === "help" && argv.length > 1) {
     const rest = argv.slice(1);
-    // cli.run() re-reads process.argv — rewrite it, not the slice
-    process.argv = [
-        process.argv[0], process.argv[1],
-        ...(rest.length === 0 ? ["--help"] : [...rest, "--help"]),
-    ];
+    process.argv = [process.argv[0], process.argv[1], ...rest, "--help"];
+} else if (argv[0] === "help") {
+    process.argv = [process.argv[0], process.argv[1], "--help"];
+} else if (argv.length === 2 && argv[1] === "help") {
+    process.argv = [process.argv[0], process.argv[1], argv[0], "--help"];
 }
 
 // bunli's createCLI() auto-imports bunli.config.ts from the cwd; a
