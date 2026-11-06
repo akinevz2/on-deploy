@@ -6,9 +6,25 @@ import { z } from "zod";
 import { checkDotsEnv, readRequires, missing, DOTS_DIR } from "../lib/dots";
 import { resolvePackage, scriptPath } from "../lib/deployScript";
 
+/**
+ * The distro package version for an installed binary, queried via the
+ * package manager — NEVER by spawning the binary itself: GUI binaries
+ * (rofi) initialize their display backend on a --version probe and
+ * flash a window on screen. dpkg (ubuntu) / pacman (manjaro).
+ */
+function pkgVersion(target: string, binary: string): string {
+    const q = target === "manjaro"
+        ? Bun.spawnSync(["pacman", "-Q", binary])
+        : Bun.spawnSync(["dpkg-query", "-W", "-f=${Version}", binary]);
+    if (q.exitCode !== 0) return "";
+    return q.stdout.toString().trim();
+}
+
 export interface CheckRow {
     binary: string;
     installed: boolean;
+    /** the binary's own --version answer (semantic version extracted) */
+    version?: string;
     pkg?: string;
     installCommand?: string;
     problem?: string;
@@ -30,7 +46,12 @@ export async function collect(): Promise<{ rows: CheckRow[]; target: string }> {
     const rows: CheckRow[] = [];
     for (const binary of requires.binaries) {
         if (!gone.includes(binary)) {
-            rows.push({ binary, installed: true });
+            // the owning package's version via the package manager;
+            // resolves through the deploy script first (binary names
+            // diverge from package names, e.g. notify-send → libnotify)
+            const res = await resolvePackage(requires.target, binary);
+            const version = res.ok && res.pkg ? pkgVersion(requires.target, res.pkg) : "";
+            rows.push({ binary, installed: true, version });
             continue;
         }
         const res = await resolvePackage(requires.target, binary);
@@ -67,7 +88,7 @@ export default defineCommand({
             console.log(`deploy target: ${target}`);
             for (const r of rows) {
                 const state = r.installed
-                    ? "installed"
+                    ? (r.version ? `installed ${r.version}` : "installed")
                     : r.problem
                         ? `MISSING (${r.problem})`
                         : `MISSING -> ${r.pkg}`;
