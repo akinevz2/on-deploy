@@ -5,7 +5,7 @@
 // itself lives in lib/tui.ts (bunli-native prompts, no whiptail).
 
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 export const DOTS = join(process.env.HOME!, "dots");
@@ -103,6 +103,23 @@ export interface PkgResult {
     pkg: string;
     ok: boolean;
     lines: string[];
+}
+
+/** the legacy regular-file swap: a REGULAR file at ~/.local/bin/<name>
+ *  is removed so the package's stow link can land — every adapter used
+ *  to carry this per package; it is the COMMON redeploy step now */
+export function swapArtifact(name: string): PkgResult {
+    const p = join(process.env.HOME!, ".local", "bin", name);
+    if (existsSync(p)) {
+        try {
+            if (lstatSync(p).isSymbolicLink()) return { pkg: name, ok: true, lines: [] };
+            unlinkSync(p);
+            return { pkg: name, ok: true, lines: [`${name}: REGULAR file at the deploy point — swapped for the package link`] };
+        } catch (e) {
+            return { pkg: name, ok: false, lines: [`${name}: swap failed (${e})`] };
+        }
+    }
+    return { pkg: name, ok: true, lines: [] };
 }
 
 /** stow -R -t $HOME <pkg>; records the remembered set */

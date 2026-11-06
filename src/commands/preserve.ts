@@ -91,7 +91,8 @@ async function resolveInteractive(pkgs: string[], opts: PreserveOptions): Promis
     }
     const noConflict = targets.filter((t) => !groups.some((g) => g.pkg === t));
 
-    console.log(`preserve: scann ${targets.length} package(s); ${groups.length} with conflicts, ${noConflict.length} clean — deploying the clean ones`);
+    console.log(`preserve: scanning ${targets.length} package(s); ${groups.length} with conflicts, ${noConflict.length} clean`);
+    console.log(`preserve: deploying the clean ones`);
     for (const pkg of noConflict) {
         const r = await preservePackage(pkg, { ...opts, yes: true, keep: true });
         for (const l of r.lines) console.log(l);

@@ -39,12 +39,26 @@ import servicesCommand from "./commands/services";
 import toolchainCommand from "./commands/toolchain";
 import dependsCommand from "./commands/depends";
 import detectServerCommand from "./commands/detect-server";
+import managedCommand from "./commands/managed";
+import supportsCommand from "./commands/supports";
 
 const argv = process.argv.slice(2);
 if (argv.length === 0) {
     // bare: check + interactive deploy (the on.deploy contract)
     const failed = await walk(false, false);
     process.exit(failed > 0 ? 1 : 0);
+}
+
+// `help` as a standalone alias for --help (bunli has no built-in
+// help command; translate before the CLI parses): `help` -> --help,
+// `help <cmd>` -> <cmd> --help
+if (argv[0] === "help") {
+    const rest = argv.slice(1);
+    // cli.run() re-reads process.argv — rewrite it, not the slice
+    process.argv = [
+        process.argv[0], process.argv[1],
+        ...(rest.length === 0 ? ["--help"] : [...rest, "--help"]),
+    ];
 }
 
 // bunli's createCLI() auto-imports bunli.config.ts from the cwd; a
@@ -80,6 +94,8 @@ cli.command(servicesCommand);
 cli.command(toolchainCommand);
 cli.command(dependsCommand);
 cli.command(detectServerCommand);
+cli.command(managedCommand);
+cli.command(supportsCommand);
 
 // Auto-detect a reachable X display BEFORE any command runs: every
 // child this CLI spawns (package hooks, preserve, service apply)
