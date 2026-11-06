@@ -200,7 +200,7 @@ export function runRule(pkg: string, rule: string): PkgResult {
 /** neat sequential printing of the captured results */
 export function printResults(results: PkgResult[]): void {
     for (const r of results) {
-        console.log(`== ${r.pkg}${r.ok ? "" : " (FAILED)"}`);
+        console.log(`==${r.pkg} ${r.ok ? "SUCCESS" : "FAILURE"}`);
         for (const l of r.lines) console.log(`  ${l}`);
     }
 }

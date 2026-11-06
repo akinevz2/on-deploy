@@ -161,7 +161,7 @@ export default defineCommand({
         const results: PkgResult[] = [];
         for (const pkg of targets) results.push(await runDepsRuleSpun(pkg, mode, makeVars));
         for (const r of results) {
-            console.log(`== ${r.pkg}${r.ok ? "" : " (FAILED)"}`);
+            console.log(`==${r.pkg} ${r.ok ? "SUCCESS" : "FAILURE"}`);
             for (const l of r.lines) console.log(l);
         }
         if (results.some((r) => !r.ok)) {
