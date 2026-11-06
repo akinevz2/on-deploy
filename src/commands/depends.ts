@@ -54,6 +54,43 @@ function runDepsRule(pkg: string, rule: string, makeVars: string[]): PkgResult {
     return { pkg, ok: (p.exitCode ?? 1) === 0, lines };
 }
 
+// the per-package make run is piped (nothing shows until it exits) — a
+// long compile looks like a hang. The spinner prints ONE line on a
+// non-tty (headless flows), a ticking label on a tty; it stops with
+// the result line. Blocks the CURRENT step only; no state kept.
+const SPIN_FRAMES = ["|", "/", "-", "\\"];
+function spinner(label: string) {
+    const err = process.stderr;
+    if (!err.isTTY) { err.write(`${label} ...\n`); return () => {}; }
+    let i = 0;
+    const tick = () => err.write(`\r${label} ${SPIN_FRAMES[i++ % SPIN_FRAMES.length]}`);
+    tick();
+    const t = setInterval(tick, 250);
+    return (meta: string) => { clearInterval(t); err.write(`\r${label} ${meta}\n`); };
+}
+
+async function runDepsRuleSpun(pkg: string, rule: string, makeVars: string[]): Promise<PkgResult> {
+    const file = depsMakefile(pkg)!;
+    const dir = join(DOTS_DIR, pkg);
+    const stop = spinner(`${pkg}:${rule}`);
+    const proc = Bun.spawn(
+        ["make", "-C", dir, "--no-print-directory", "-f", file, ...makeVars, rule],
+        { cwd: DOTS_DIR, stdout: "pipe", stderr: "pipe", stdin: "ignore" },
+    );
+    const [out, errText] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+    ]);
+    const code = await proc.exited;
+    const ok = code === 0;
+    stop(ok ? "ok" : `FAILED (${code})`);
+    const lines = [
+        ...(out.trim().split("\n").filter(Boolean).map((l) => `  ${l}`)),
+        ...(errText.trim().split("\n").filter(Boolean).map((l) => `  ! ${l}`)),
+    ];
+    return { pkg, ok, lines };
+}
+
 export default defineCommand({
     name: "depends",
     description:
@@ -149,10 +186,10 @@ export default defineCommand({
         }
         const makeVars = flags.force ? ["FORCE=1"] : [];
         const results: PkgResult[] = [];
-        for (const pkg of targets) results.push(runDepsRule(pkg, mode, makeVars));
+        for (const pkg of targets) results.push(await runDepsRuleSpun(pkg, mode, makeVars));
         for (const r of results) {
             console.log(`== ${r.pkg}${r.ok ? "" : " (FAILED)"}`);
-            for (const l of r.lines) console.log(`  ${l}`);
+            for (const l of r.lines) console.log(l);
         }
         if (results.some((r) => !r.ok)) {
             console.error("depends: FAILED packages above");
