@@ -19,7 +19,7 @@ import { defineCommand } from "@bunli/core";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { checkDotsEnv, DOTS_DIR } from "../lib/dots";
-import { printResults, runRule, type PkgResult } from "../lib/pkgops";
+import { printResults, pkgMakefile, runMakeSpun, type PkgResult } from "../lib/pkgops";
 import { readWmPackages } from "../lib/dots";
 import { releaseTui, tuiChecklist, tuiSelect } from "../lib/tui";
 
@@ -92,7 +92,12 @@ export default defineCommand({
             // actioning (see tuiRunner.ts — same broken-screen class)
             await releaseTui();
             const results: PkgResult[] = [];
-            for (const pkg of sel) results.push(runRule(pkg, pick));
+            for (const pkg of sel) {
+                const mf = pkgMakefile(pkg);
+                if (!mf) { results.push({ pkg, ok: false, lines: ["no Makefile"] }); continue; }
+                const r = await runMakeSpun(mf.dir, mf.file, [], pick, `${pkg}:${pick}`);
+                results.push({ pkg, ok: r.ok, lines: r.lines });
+            }
             printResults(results);
             if (results.some((r) => !r.ok)) process.exit(1);
             return;
@@ -145,7 +150,10 @@ export default defineCommand({
         }
         const results: PkgResult[] = [];
         for (const pkg of targets) {
-            results.push(runRule(pkg, rule));
+            const mf = pkgMakefile(pkg);
+            if (!mf) { results.push({ pkg, ok: false, lines: ["no Makefile"] }); continue; }
+            const r = await runMakeSpun(mf.dir, mf.file, [], rule, `${pkg}:${rule}`);
+            results.push({ pkg, ok: r.ok, lines: r.lines });
         }
         printResults(results);
         if (results.some((r) => !r.ok)) process.exit(1);

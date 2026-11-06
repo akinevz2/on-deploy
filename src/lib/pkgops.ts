@@ -205,6 +205,47 @@ export function printResults(results: PkgResult[]): void {
     }
 }
 
+// the per-package make runs are piped (nothing shows until the rule
+// exits) — a long compile looks like a hang. The spinner prints ONE
+// line on a non-tty (headless flows), a ticking label on a tty; it
+// stops with the result. Per step; no state kept.
+const SPIN_FRAMES = ["|", "/", "-", "\\"];
+export function spinner(label: string): (meta: string) => void {
+    const err = process.stderr;
+    if (!err.isTTY) { err.write(`${label} ...\n`); return () => {}; }
+    let i = 0;
+    const tick = () => err.write(`\r${label} ${SPIN_FRAMES[i++ % SPIN_FRAMES.length]}`);
+    tick();
+    const t = setInterval(tick, 250);
+    return (meta: string) => { clearInterval(t); err.write(`\r${label} ${meta}\n`); };
+}
+
+/** ONE package Makefile run, async so the spinner can tick the
+ *  blocking step; the raw spawnSync twin (runRule/runDeps twin) rides
+ *  the same text capture. */
+export async function runMakeSpun(
+    dir: string, file: string, makeVars: string[], rule: string,
+    label: string,
+): Promise<{ ok: boolean; lines: string[] }> {
+    const stop = spinner(label);
+    const proc = Bun.spawn(
+        ["make", "-C", dir, "--no-print-directory", "-f", file, ...makeVars, rule],
+        { cwd: dir, stdout: "pipe", stderr: "pipe", stdin: "ignore" },
+    );
+    const [out, errText] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+    ]);
+    const code = await proc.exited;
+    const ok = code === 0;
+    stop(ok ? "ok" : `FAILED (${code})`);
+    const lines = [
+        ...out.trim().split("\n").filter(Boolean),
+        ...errText.trim().split("\n").filter(Boolean),
+    ];
+    return { ok, lines };
+}
+
 /** packages that ship a dependency Makefile (the depends scheme
  *  preferred, the legacy hook directory as fallback) */
 export function packagesWithMakefiles(): string[] {
