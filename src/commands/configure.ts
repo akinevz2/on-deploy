@@ -2,11 +2,11 @@
 // (or flags): the deploy TARGET and the REQUIRED-PACKAGE list of
 // wm.required.
 //
-//   on-deploy configure              interactive menu / flags
-//   on-deploy configure --target arch
-//   on-deploy configure --add pkgA,pkgB
-//   on-deploy configure --remove pkgA
-//   on-deploy configure --show
+//	on-deploy configure	interactive menu / flags
+//	on-deploy configure --target arch
+//	on-deploy configure --add pkgA,pkgB
+//	on-deploy configure --remove pkgA
+//	on-deploy configure --show
 //
 // wm.required structure: line 1 = whitespace-separated required
 // binaries; the LAST non-comment line = the deploy target name
@@ -216,13 +216,13 @@ function validCredentials(name: string, email: string): string {
 }
 
 /** PROMPT for the git identity when dots/shell/.my-credentials is
- *  ABSENT (gitignored; first run on a fresh machine — the shell rc
- *  files autoload it once it exists). Two lines: name, email —
- *  deliberately on the SIMPLE line reader (lines.ts), NOT the bunli
+ * ABSENT (gitignored; first run on a fresh machine — the shell rc
+ * files autoload it once it exists). Two lines: name, email —
+ * deliberately on the SIMPLE line reader (lines.ts), NOT the bunli
  *  text prompt: under `make install` the stdin feeding races the
  *  opentui prompt session's initialization (blank screen + lost
- *  keystrokes); a plain line read is make-recipe-safe.
- *  Returns the values, or null when the user skipped / is non-tty. */
+ * keystrokes); a plain line read is make-recipe-safe.
+ * Returns the values, or null when the user skipped / is non-tty. */
 async function promptCredentials(): Promise<{ name: string; email: string } | null> {
     if (existsSync(CRED_REPO) || existsSync(CRED_HOME)) return null;
     if (!process.stdin.isTTY) return null;
@@ -594,6 +594,16 @@ export default defineCommand({
                     if (failed > 0) {
                         console.error(`wizard: ${failed} binary/b missing`);
                         process.exit(1);
+                    }
+                    if (process.env.ONDEPLOY_INSTALL_CHAIN === "1") {
+                        // CALLED FROM THE DOTS INSTALL RECIPE: the caller
+                        // owns preserve -> package rules -> stow -> apply
+                        // right after this (running them here ran the
+                        // package install procedure TWICE). The requirement
+                        // walk above still runs — the chain has no
+                        // binaries walk of its own.
+                        console.log("wizard: rules/stow/apply deferred to the caller (the dots install chain)");
+                        return;
                     }
                     console.log("wizard: package install rules");
                     // scope to the stows.required manifest — the individually
