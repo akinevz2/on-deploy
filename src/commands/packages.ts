@@ -19,6 +19,7 @@ import { defineCommand } from "@bunli/core";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { checkDotsEnv, DOTS_DIR, readWmPackages } from "../lib/dots";
+import { echoHelpList } from "../lib/lines";
 import { printResults, runRule, type PkgResult } from "../lib/pkgops";
 import { releaseTui, tuiChecklist, tuiSelect } from "../lib/tui";
 
@@ -97,9 +98,23 @@ export default defineCommand({
             return;
         }
 
+        if (rule === "help") {
+            echoHelpList("packages", "on-deploy packages <rule> [pkg...]", [
+                `install\ttoolchain + build + link + stow`,
+                `build\tthe checkout's own build recipes`,
+                `link\tstage the artifact into the package .local/bin`,
+                `uninstall\tremove the artifact + links + record`,
+                `status\tbinary / artifact / record report`,
+                `start stop enable disable\tunits (no-ops for binaries)`,
+                "list\tprint packages with Makefiles",
+            ]);
+            return;
+        }
+
         if (!rule || rule === "list") {
             console.log(`packages: ${available.join(" ") || "(none)"}`);
             console.log(`packages: rules: ${STANDARD_RULES.join(" ")}`);
+            console.log("packages:\thelp\ton-deploy packages help");
             return;
         }
         const wanted = rest.length ? rest : available;

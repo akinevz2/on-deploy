@@ -14,7 +14,7 @@ import { archivePackage } from "../lib/defaults";
 export default defineCommand({
     name: "archive",
     description:
-        "Back up the your current config files\nto stow package ~/dots/defaults/",
+        "Back up your current config files to the stow package defaults/ (~/dots/defaults/)",
     options: {
         "dry-run": option(z.boolean().optional(), {
             argumentKind: "flag" as const,

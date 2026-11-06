@@ -20,17 +20,18 @@ import {
     readServiceOrder, unitify, runServicesAction, SERVICES_ACTIONS,
     type ServicesAction,
 } from "../lib/services";
+import { echoHelpList } from "../lib/lines";
 
 export default defineCommand({
     name: "services",
     description:
-        "Control services.required units via systemd:\n"
-        + "check|start|stop|restart|statu ",
+        "Control the services.required units over systemd:"
+        + " check, start, stop, restart, status",
     options: {
         force: option(z.boolean().optional(), {
             argumentKind: "flag" as const,
-            description: "no confirmation (non-interactive)",
-            short: "y",
+            description: "no confirmation, non-interactive runs",
+            short: "f",
         }),
     },
     handler: async ({ flags, positional }) => {
@@ -39,9 +40,22 @@ export default defineCommand({
             console.error(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
-        const action = (positional[0] ?? "") as ServicesAction;
+        const raw = positional[0] ?? "";
+        const action = raw === "help" ? raw : (raw as ServicesAction);
+        if (raw === "help") {
+            echoHelpList("services", "on-deploy services <action> [--force]", [
+                "check\treload + enable --now, no-op when active",
+                "start\treset-failed then start each unit",
+                "stop\tcancel jobs, drop the wants links, stop",
+                "restart\trestart each unit in the order",
+                "status\tis-active per unit",
+            ]);
+            process.exit(0);
+        }
         if (!SERVICES_ACTIONS.includes(action)) {
-            console.error(`services: usage: on-deploy services <${SERVICES_ACTIONS.join("|")}> [--force]`);
+            console.error(`services: ${action ?? "(no action)"} is not a services action`);
+            console.error("services:	usage	on-deploy services <action>");
+            console.error("services:	help	on-deploy services help");
             process.exit(2);
         }
         const order = readServiceOrder();

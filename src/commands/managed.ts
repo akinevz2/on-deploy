@@ -39,6 +39,7 @@ import {
     registryTransportInstalled,
     type PkgDescriptor,
 } from "../lib/adapters";
+import { echoHelpList, echoOrdered } from "../lib/lines";
 import { pkgMakefile, stowPkg, swapArtifact, unstowPkg } from "../lib/pkgops";
 import { lookupTransport } from "../lib/pkgmanagers";
 import { readRequires } from "../lib/dots";
@@ -131,38 +132,52 @@ interface MakeResult { ok: boolean; lines: string[] }
 export default defineCommand({
     name: "managed",
     description:
-        "Package-managed deploy router per dots package (consults the adapter; resolves method > conf > default; routes; see also 'on-deploy supports')",
+        "Route managed dots package operations to deploy-support implementation Makefile",
     options: {
         method: option(z.string().optional(), {
-            description: "explicit method; overrides the doftiles.conf record (knob <PKG>=<method>)",
+            description: "Override the doftiles.conf record (PACKAGE=source|pkg)",
         }),
         value: option(z.string().optional(), {
-            description: "the value written by conf-set",
+            description: "Write the conf-set record value",
         }),
         force: option(z.string().optional(), { argumentKind: "flag" as const,
-            description: "rebuild/redeploy even when deployed already (--force=1)",
+            description: "Redeploy even when deployed already (--force=1)",
         }),
         "dry-run": option(z.string().optional(), { argumentKind: "flag" as const,
-            description: "print what would run (--dry-run=1)",
+            description: "Print what would run (--dry-run=1)",
         }),
     },
     handler: async ({ flags, positional }) => {
         const [pkg, op, ...extra] = positional ?? [];
+        if (op === "help") {
+            echoHelpList("managed", "on-deploy managed <pkg> <op> [--method|--force|--dry-run]", [
+                "install	route PACKAGE=source|pkg",
+                "uninstall	adapter uninstall + unstow + record reset",
+                "status	deploy state: artifact + checkout + record",
+                "conf-get	print the doftiles.conf record",
+                "conf-set	write the record (--value V)",
+                "metadata	the metadata items, one line",
+                "toolchain, build, link	passthrough make targets",
+                "trust-local, trust-global	passthrough make targets",
+            ]);
+            process.exit(0);
+        }
         if (!pkg || !op || extra.length > 0) {
-            console.error("managed: usage: on-deploy managed <pkg> <op> [--method M] [--value V] [--force=1] [--dry-run=1]");
-            console.error("op: install | uninstall | status | conf-get | conf-set | metadata | <metadata field>");
-            console.error("	or a make target passthrough (toolchain, build, link, install-source, ...)");
+            console.error(`managed: ${op ?? "(no op)"} is not a managed op`);
+            console.error("managed:	usage	on-deploy managed <pkg> <op>");
+            console.error("managed:	help	on-deploy managed <pkg> help");
             process.exit(2);
         }
         const { target } = await readRequires();
         const family: string | null = target ?? null;
         if (!pkgMakefile(pkg)) {
-            console.error(`managed: ${pkg}: no adapter (dots/${pkg}/.local/state/depends/${pkg}.Makefile)`);
+            console.error(`managed: ${pkg}: no adapter`);
+            console.error(`managed:\tabsent\tdots/${pkg}/.local/state/depends/${pkg}.Makefile`);
             process.exit(2);
         }
         const consultDesc = consult(pkg);
         if (!consultDesc.ok) {
-            console.error(`managed: ${pkg}: ${consultDesc.problem}`);
+            echoOrdered([`managed: ${consultDesc.problem}`, `managed: the adapter consult failed for ${pkg}`]);
             process.exit(2);
         }
         const desc: PkgDescriptor = consultDesc;

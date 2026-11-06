@@ -93,7 +93,7 @@ function persistEnvFile(path: string, display: string): boolean {
 export default defineCommand({
     name: "detect-server",
     description:
-        "Probe a reachable X server and print it; optionally persist DISPLAY to the systemd user session (--persist-to-systemd) or an includeable sh env file (--persist-to-env=<file>). An optional ADDRESS is checked and persisted instead of autodetecting.",
+        "Probe a reachable X server, persist its DISPLAY (the --persist flag pair; an ADDRESS probes first)",
     options: {
         "persist-to-systemd": option(z.boolean().optional(), {
             description: "set DISPLAY in the systemd --user manager environment (no-op on SysV)",

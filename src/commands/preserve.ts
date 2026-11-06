@@ -181,7 +181,7 @@ async function resolveInteractive(pkgs: string[], opts: PreserveOptions): Promis
 export default defineCommand({
     name: "preserve",
     description:
-        "Resolve stow conflicts for packages before (re)stowing — per-file TUI with side-by-side diff, or the archive-first default",
+        "Resolve stow conflicts before (re)stowing (the per-file diff UI, else the archive-first keep flow)",
     options: {
         "dry-run": option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "print the plan per package, change nothing",

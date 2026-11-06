@@ -57,7 +57,7 @@ function runDepsRule(pkg: string, rule: string, makeVars: string[]): PkgResult {
 export default defineCommand({
     name: "depends",
     description:
-        "Sync the dots submodules and run the per-package depends Makefiles (--build/--install depth); bare = discovery report",
+        "Drive the per-package adapter Makefiles: sync the submodules, build + install (--build|--install; bare prints the report)",
     options: {
         build: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "sync + run each package's Makefile `build` rule (toolchain + compile, no install)",

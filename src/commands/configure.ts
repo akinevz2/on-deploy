@@ -425,7 +425,7 @@ async function tuiEdit(m: Manifest): Promise<EditResult> {
 export default defineCommand({
     name: "configure",
     description:
-        "Configure the deployment: target + binaries (wm.required), deployment model + services (deploy.profile), git credentials (dots/shell/.my-credentials)",
+        "Configure the deployment manifests: target, binaries, model, services, identity",
     options: {
         target: option(z.string().optional(), {
             description: "set the deploy target directly",

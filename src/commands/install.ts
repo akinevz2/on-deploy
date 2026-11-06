@@ -82,7 +82,7 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
 export default defineCommand({
     name: "install",
     description:
-        "Install missing required binaries from the target repositories (search + install + re-verify)",
+        "Install the missing required binaries via the deploy target (search + install + re-verify)",
     options: {
         force: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "install without confirmation (non-interactive)",

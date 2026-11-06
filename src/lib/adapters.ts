@@ -182,7 +182,7 @@ export function consult(pkg: string): PkgDescriptor {
         const out = `${r.stdout ?? ""}`;
         if ((r.exitCode ?? 1) !== 0) {
             ok = false;
-            problem = `metadata consult failed: ${`${r.stderr ?? ""}`.trim().split("\n")[0]}`;
+            problem = "the adapter prints no metadata contract";
         } else {
             const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
             raw.git_repo = lines[0] ?? "";

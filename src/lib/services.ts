@@ -12,10 +12,11 @@ import { DOTS_DIR } from "./dots";
 
 export const SERVICE_ORDER_FILE = join(DOTS_DIR, "services.required");
 
-export type ServicesAction = "check" | "start" | "stop" | "restart" | "status";
+export type ServicesAction =
+    | "check" | "start" | "stop" | "restart" | "status" | "help";
 
 export const SERVICES_ACTIONS: ServicesAction[] = [
-    "check", "start", "stop", "restart", "status",
+    "check", "start", "stop", "restart", "status", "help",
 ];
 
 function shOut(cmd: string): { code: number; out: string } {
