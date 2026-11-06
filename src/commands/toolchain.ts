@@ -159,7 +159,7 @@ async function ensure(
 
 	// b) absent: --check is the fail-fast contract
 	if (check) {
-		console.error("toolchain: install it");
+		console.error(`toolchain: install the toolchain packages (${key})`);
 		console.error(`absent:\t${key}`);
 		console.error(`the command:\ton-deploy toolchain --${key}`);
 		process.exit(2);
