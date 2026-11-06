@@ -122,7 +122,7 @@ export default defineCommand({
             }
         }
 
-        // 2) DRIVE — CONFIGURED SCOPE: the packages system.required lists
+        // 2) DRIVE — CONFIGURED SCOPE: the packages system.depends lists
         // (submodule manifest), intersected with .Makefile presence — a
         // package with submodules but no Makefile is a misconfiguration,
         // reported, not silently skipped

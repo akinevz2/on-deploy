@@ -1,6 +1,6 @@
-// src/commands/services.ts — the services.required runner. The dots Makefile
+// src/commands/services.ts — the services.depends runner. The dots Makefile
 // DELEGATES here: enable/start/stop/restart over the units listed in
-// services.required (repo-level manifest, whitespace-split, start order).
+// services.depends (repo-level manifest, whitespace-split, start order).
 //
 //	on-deploy services check	daemon-reload + enable --now each unit
 //	on-deploy services start	start each unit (reset-failed first)
@@ -10,7 +10,7 @@
 //
 // Non-interactive runs REQUIRE --yes (start/stop/restart confirm on a
 // tty; nothing hangs on stdin). NO package knowledge: the unit list
-// comes entirely from services.required (the runner lives in
+// comes entirely from services.depends (the runner lives in
 // lib/services.ts, shared with the `deploy` menu).
 
 import { defineCommand, option } from "@bunli/core";
@@ -47,7 +47,7 @@ export default defineCommand({
         }
         const order = readServiceOrder();
         if (order.length === 0) {
-            say("services: empty or missing services.required");
+            say("services: empty or missing services.depends");
             process.exit(2);
         }
         const units = unitify(order);

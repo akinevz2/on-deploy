@@ -35,11 +35,11 @@ bun x bunli build    # -> dist/on-deploy
 cwd to the repo root (marked by the manifest files) and reads four
 repo-level manifests:
 
-- `stows.required` — the stow package list
-- `wm.required` — the required binaries + the deploy target/session
-- `system.required` — the submodule manifest (each line: a package and
+- `stow.depends` — the stow package list
+- `wm.depends` — the required binaries + the deploy target/session
+- `system.depends` — the submodule manifest (each line: a package and
   its dots-relative checkout paths)
-- `services.required` — the systemd user-unit start order
+- `services.depends` — the systemd user-unit start order
 
 ## The golden rule
 
@@ -77,5 +77,5 @@ dots Makefile                bootstrap | install | services-* | status
   └─ on-deploy packages <rule>   group runner over the package Makefiles
   └─ on-deploy pkg <op> <name>   platform package manager
   └─ on-deploy configure         manifest edits + the folded apply
-  └─ on-deploy services <action> services.required runner
+  └─ on-deploy services <action> services.depends runner
 ```

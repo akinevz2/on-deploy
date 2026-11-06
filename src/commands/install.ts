@@ -20,7 +20,7 @@ const isInteractive = (): boolean => process.stdin.isTTY === true;
 export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Promise<number> {
     const requires = await readRequires();
     const target = requires.target;
-    console.log(`target: ${target} (wm.required)`);
+    console.log(`target: ${target} (wm.depends)`);
     // fail fast instead of hanging: a non-interactive run without --yes
     // can never answer the per-binary confirmations
     if (!dryRun && !yes && !isInteractive() && missing(requires.binaries).length > 0) {

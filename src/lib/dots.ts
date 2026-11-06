@@ -1,5 +1,5 @@
 // src/lib/dots.ts — the environment contract: the repo, its origin,
-// and the manifests (wm.required / stows.required).
+// and the manifests (wm.depends / stow.depends).
 
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
@@ -27,7 +27,7 @@ export function checkDotsEnv(): EnvCheck {
     let cwd = process.cwd();
     if (cwd !== DOTS_DIR) {
         // walk up from the cwd looking for the repo root (the
-        // wm.required marker; stows.required accepted for migration) —
+        // wm.depends marker; stow.depends accepted for migration) —
         // accepts subdirectories, rejects unrelated dirs.
         // Compare REALPATHS: HOME itself may be reached through a symlink
         // (e.g. /tmp/opencode/.../home/dots -> ~/dots), and a raw string
@@ -36,7 +36,9 @@ export function checkDotsEnv(): EnvCheck {
         let dir = cwd;
         let found = "";
         for (let i = 0; i < 8 && dir !== "/" && dir !== ""; i += 1) {
-            if (existsSync(join(dir, "wm.required")) ||
+            if (existsSync(join(dir, "wm.depends")) ||
+                existsSync(join(dir, "stow.depends")) ||
+                existsSync(join(dir, "wm.required")) ||
                 existsSync(join(dir, "stows.required"))) { found = dir; break; }
             dir = dirname(dir);
         }
@@ -70,14 +72,28 @@ export interface Requires {
 }
 
 /**
- * Parse wm.required — the deployment manifest. Line 1 = the
- * required binaries (whitespace-separated); an optional
- * `session = <model>` KEY=VALUE line = the deployment model
- * (default "wsl-systemd"); the last remaining non-comment line = the
- * deploy target name. Anything else is a structural error.
+ * Manifest layering (ONE file per manifest): `*.depends` is gitignored
+ * as a pattern, but the developer force-adds it when expanding the
+ * software (`git add -f`) — so it ships TRACKED and users personalize
+ * the same file, hiding their dirtiness with
+ * `git update-index --skip-worktree` (the `make update` ritual
+ * automates the pull dance). Mainline-worthy additions made on a
+ * user machine ship the same way: edit, `git add -f`, commit.
  */
-export async function readRequires(file = "wm.required"): Promise<Requires> {
-    const raw = Bun.file(join(DOTS_DIR, file));
+export function manifestPath(name: string): string {
+    return join(DOTS_DIR, `${name}.depends`);
+}
+
+/**
+ * Parse the wm manifest (user wm.depends, else the canonical
+ * wm.required). Line 1 = the required binaries (whitespace-separated);
+ * an optional `session = <model>` KEY=VALUE line = the deployment
+ * model (default "wsl-systemd"); the last remaining non-comment line
+ * = the deploy target name. Anything else is a structural error.
+ */
+export async function readRequires(name = "wm"): Promise<Requires> {
+    const path = manifestPath(name);
+    const raw = Bun.file(path);
     return raw.text().then((text) => {
         const lines = text
             .split("\n")
@@ -85,12 +101,12 @@ export async function readRequires(file = "wm.required"): Promise<Requires> {
             .filter((l) => l && !l.startsWith("#"));
         if (lines.length < 2) {
             throw new Error(
-                `${file}: expected >=2 non-comment lines (binaries line + deploy target), got ${lines.length}`,
+                `${path}: expected >=2 non-comment lines (binaries line + deploy target), got ${lines.length}`,
             );
         }
         const binaries = lines[0].split(/\s+/).filter(Boolean);
         if (binaries.length === 0) {
-            throw new Error(`${file}: the first line lists no binaries`);
+            throw new Error(`${path}: the first line lists no binaries`);
         }
         const session = lines.length >= 3 ? lines[1] : "wsl-systemd";
         return { binaries, session, target: lines[lines.length - 1] };
@@ -98,7 +114,7 @@ export async function readRequires(file = "wm.required"): Promise<Requires> {
 }
 
 /**
- * Parse stows.required — the STOW manifest. One package per line;
+ * Parse stow.depends — the STOW manifest. One package per line;
  * comments (#) and blank lines are ignored. Scoping source: the
  * package-rule phase must ONLY touch the packages manifested here —
  * the residually deployable packages (novnc/x11vnc/xrdp/xvfb and the
@@ -107,7 +123,7 @@ export async function readRequires(file = "wm.required"): Promise<Requires> {
  * on their unstowed user units) packages nobody asked for.
  */
 export function readWmPackages(): string[] {
-    return readFileSync(join(DOTS_DIR, "stows.required"), "utf8")
+    return readFileSync(manifestPath("stows"), "utf8")
         .split("\n")
         .map((l) => l.trim())
         .filter((l) => l && !l.startsWith("#"))

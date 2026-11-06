@@ -7,6 +7,7 @@
 
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { manifestPath } from "./dots";
 
 export const DOTS = join(process.env.HOME!, "dots");
 export const STOW_STATE = join(process.env.HOME!, ".local/state/doftiles/stowed");
@@ -70,12 +71,12 @@ export function packagesWithDepsMakefiles(): string[] {
 }
 
 /** submodule paths mapped to the stow package that owns each
- * (duplicated across packages). CONFIGURED SOURCE: the system.required
+ * (duplicated across packages). CONFIGURED SOURCE: the system.depends
  *  manifest — each non-comment line is `<pkg> <path> <path>...`.
  * FALLBACK: .gitmodules walk (grouped by first path segment) when the
  * manifest is missing or empty — keeps bare checkouts usable. */
 export function submodulesByPackage(): Record<string, string[]> {
-    const manifest = join(DOTS, "system.required");
+    const manifest = manifestPath("system");
     if (existsSync(manifest)) {
         const out: Record<string, string[]> = {};
         for (const line of readFileSync(manifest, "utf8").split("\n")) {

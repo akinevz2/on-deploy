@@ -113,7 +113,7 @@ export default defineCommand({
         }
         const wanted = rest.length ? rest : available;
         let targets = wanted.filter((p) => available.includes(p));
-        // A BARE sweep (no explicit names) is scoped to the stows.required
+        // A BARE sweep (no explicit names) is scoped to the stow.depends
         // manifest: the individually deployable packages
         // (novnc/x11vnc/xrdp/xvfb…) must NOT be swept by bootstrap — their
         // unstowed user units make every rule fail after installing.
@@ -125,7 +125,7 @@ export default defineCommand({
             : [];
         if (spared.length > 0) {
             console.log(
-                `packages: skipped (not in wm.required; install on demand): ${spared.join(" ")}`,
+                `packages: skipped (not in wm.depends; install on demand): ${spared.join(" ")}`,
             );
             targets = targets.filter((t) => manifest.includes(t));
         }

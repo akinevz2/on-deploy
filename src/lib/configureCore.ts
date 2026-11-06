@@ -1,6 +1,6 @@
 // src/lib/configureCore.ts — the apply engine, shared by the `configure`
 // verb (after its edits are saved) and the wizard path: resolve the
-// deploy target from the wm.required manifest (the single deployment
+// deploy target from the wm.depends manifest (the single deployment
 // manifest) and run its GENERIC step list. Returns the failure count
 // (caller exits).
 //

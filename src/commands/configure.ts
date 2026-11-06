@@ -1,6 +1,6 @@
 // src/commands/configure.ts — edit the deployment manifests from a TUI
 // (or flags): the deploy TARGET and the REQUIRED-PACKAGE list of
-// wm.required.
+// wm.depends.
 //
 //	on-deploy configure	interactive menu / flags
 //	on-deploy configure --target arch
@@ -8,7 +8,7 @@
 //	on-deploy configure --remove pkgA
 //	on-deploy configure --show
 //
-// wm.required structure: line 1 = whitespace-separated required
+// wm.depends structure: line 1 = whitespace-separated required
 // binaries; the LAST non-comment line = the deploy target name
 // (selecting ~/.local/bin/install/<target>.deploy). Comments (#) are
 // preserved; edits rewrite only the two content lines.
@@ -20,7 +20,7 @@ import {
     readFileSync, writeFileSync, existsSync, readdirSync,
     chmodSync, realpathSync,
 } from "node:fs";
-import { checkDotsEnv, DOTS_DIR, readRequires, readWmPackages } from "../lib/dots";
+import { checkDotsEnv, DOTS_DIR, manifestPath, readRequires, readWmPackages } from "../lib/dots";
 import { readLine, say } from "../lib/lines";
 import { runApply } from "../lib/configureCore";
 import { walk } from "./install";
@@ -51,11 +51,11 @@ interface Manifest {
 }
 
 function readManifest(): Manifest {
-    const text = readFileSync(join(DOTS_DIR, "wm.required"), "utf8");
+    const text = readFileSync(manifestPath("wm"), "utf8");
     const all = text.split("\n");
     const content = all.filter((l) => l.trim() && !l.trim().startsWith("#"));
     if (content.length < 2) {
-        throw new Error("wm.required: expected a binaries line and a target line");
+        throw new Error("wm.depends: expected a binaries line and a target line");
     }
     const comments = all.slice(0, all.indexOf(content[0]));
     // positional layout: [binaries] [session?] [target]
@@ -77,41 +77,43 @@ function writeManifest(m: Manifest): void {
     // saved manifest silently loses the deployment model
     if (m.session || readSession()) writeSession(m.session);
     writeFileSync(
-        join(DOTS_DIR, "wm.required"),
+        join(DOTS_DIR, "wm.depends"),
         [...m.comments, m.binaries.join(" "), m.session, m.target].join("\n") + "\n",
     );
 }
 
-// --- the deployment model (the `session =` line of wm.required) ------------
+// --- the deployment model (the `session =` line of wm.depends) ------------
 // The model selects the deploy target implementation (apply): session =
-// HOW the graphical session starts. wm.required IS the manifest —
+// HOW the graphical session starts. wm.depends IS the manifest —
 // binaries line, session line, deploy target line (positional). Comments
 // are preserved; only the session line is rewritten in place.
 
 const SESSIONS = ["greetd", "wsl-systemd", "xinit", "nested"];
 
-/** the session model from wm.required line 2 ("" = absent) */
+/** the session model from wm.depends line 2 ("" = absent) */
 function readSession(): string {
-    const lines = readFileSync(join(DOTS_DIR, "wm.required"), "utf8")
+    const lines = readFileSync(manifestPath("wm"), "utf8")
         .split("\n")
         .map((l) => l.trim())
         .filter((l) => l && !l.startsWith("#"));
     return lines.length >= 3 ? lines[1] : "";
 }
 
-/** rewrite ONLY the session line (wm.required line 2), comments kept */
+/** rewrite ONLY the session line (wm.depends line 2), comments kept.
+ * Reads the LAYERED manifest (user .depends, else the canonical
+ * .required) and writes the result to the USER layer — configure
+ * never dirties a tracked file. */
 function writeSession(session: string): void {
-    const path = join(DOTS_DIR, "wm.required");
-    const lines = readFileSync(path, "utf8").split("\n");
+    const lines = readFileSync(manifestPath("wm"), "utf8").split("\n");
     const content = lines
         .map((l, i) => ({ l, i }))
         .filter(({ l }) => l.trim() && !l.trim().startsWith("#"));
     if (content.length >= 3) lines[content[1].i] = session;
     else lines.splice(content[0].i + 1, 0, session);
-    writeFileSync(path, lines.join("\n"));
+    writeFileSync(join(DOTS_DIR, "wm.depends"), lines.join("\n"));
 }
 
-// --- stows.required (the STOW manifest) & system.required (SUBMODULES) ----
+// --- stow.depends (the STOW manifest) & system.depends (SUBMODULES) ----
 // Both are plain list files: comments (#) and blanks preserved, content
 // lines rewritten per edit. The configure TUI offers checkslists over
 // the same structured pieces; flags accept comma/space separated specs.
@@ -119,7 +121,7 @@ function writeSession(session: string): void {
 interface StowsFile { comments: string[]; packages: string[] }
 
 function readStows(): StowsFile {
-    const all = readFileSync(join(DOTS_DIR, "stows.required"), "utf8").split("\n");
+    const all = readFileSync(manifestPath("stows"), "utf8").split("\n");
     const firstContent = all.findIndex((l) => l.trim() && !l.trim().startsWith("#"));
     const comments = firstContent < 0 ? all.slice() : all.slice(0, firstContent);
     const packages = all
@@ -131,7 +133,7 @@ function readStows(): StowsFile {
 
 function writeStows(s: StowsFile): void {
     writeFileSync(
-        join(DOTS_DIR, "stows.required"),
+        join(DOTS_DIR, "stow.depends"),
         [...s.comments, ...s.packages].join("\n") + "\n",
     );
 }
@@ -139,7 +141,7 @@ function writeStows(s: StowsFile): void {
 interface SubsFile { comments: string[]; entries: { pkg: string; paths: string[] }[] }
 
 function readSubs(): SubsFile {
-    const all = readFileSync(join(DOTS_DIR, "system.required"), "utf8").split("\n");
+    const all = readFileSync(manifestPath("system"), "utf8").split("\n");
     const firstContent = all.findIndex((l) => l.trim() && !l.trim().startsWith("#"));
     const comments = firstContent < 0 ? all.slice() : all.slice(0, firstContent);
     const entries: SubsFile["entries"] = [];
@@ -154,7 +156,7 @@ function readSubs(): SubsFile {
 
 function writeSubs(s: SubsFile): void {
     writeFileSync(
-        join(DOTS_DIR, "system.required"),
+        join(DOTS_DIR, "system.depends"),
         [
             ...s.comments,
             ...s.entries.map((e) => [e.pkg, ...e.paths].join(" ")),
@@ -314,7 +316,7 @@ async function tuiEdit(m: Manifest): Promise<EditResult> {
             }
             const names = [...known].sort();
             const sel = await tuiChecklist<string>(
-                "stow packages (stows.required) — space toggles, enter confirms",
+                "stow packages (stow.depends) — space toggles, enter confirms",
                 names.map((p) => ({
                     label: p,
                     value: p,
@@ -324,7 +326,7 @@ async function tuiEdit(m: Manifest): Promise<EditResult> {
             );
             if (sel === null) continue;
             writeStows({ comments: stows.comments, packages: names.filter((p) => sel.includes(p)) });
-            console.log("configure: stows.required rewritten to the checked set");
+            console.log("configure: stow.depends rewritten to the checked set");
             continue;
         }
         if (a === "subs") {
@@ -332,7 +334,7 @@ async function tuiEdit(m: Manifest): Promise<EditResult> {
             // additions loop after the checklist until an empty edit
             const labels = subs.entries.map((e) => [e.pkg, ...e.paths].join(" "));
             const sel = await tuiChecklist<string>(
-                "system.required submodules — UNCHECK a line to DROP it, enter confirms",
+                "system.depends submodules — UNCHECK a line to DROP it, enter confirms",
                 labels.map((l) => ({ label: l, value: l })),
                 { preselect: labels },
             );
@@ -349,7 +351,7 @@ async function tuiEdit(m: Manifest): Promise<EditResult> {
                 kept.push({ pkg: fields[0], paths: fields.slice(1) });
             }
             writeSubs({ comments: subs.comments, entries: kept });
-            console.log(`configure: system.required rewritten (${kept.length} package line(s))`);
+            console.log(`configure: system.depends rewritten (${kept.length} package line(s))`);
             continue;
         }
         if (a === "target") {
@@ -436,16 +438,16 @@ export default defineCommand({
             description: "comma/space-separated binaries to remove",
         }),
         "add-stows": option(z.string().optional(), {
-            description: "comma/space-separated stow packages to add (stows.required)",
+            description: "comma/space-separated stow packages to add (stow.depends)",
         }),
         "remove-stows": option(z.string().optional(), {
-            description: "comma/space-separated stow packages to drop (stows.required)",
+            description: "comma/space-separated stow packages to drop (stow.depends)",
         }),
         "add-subs": option(z.string().optional(), {
-            description: "submodule lines to add: pkg:pkg-relative.path[,pkg:path2…] (system.required)",
+            description: "submodule lines to add: pkg:pkg-relative.path[,pkg:path2…] (system.depends)",
         }),
         "remove-subs": option(z.string().optional(), {
-            description: "submodule entries to drop (\"pkg\" or pkg:path) (system.required)",
+            description: "submodule entries to drop (\"pkg\" or pkg:path) (system.depends)",
         }),
         session: option(z.string().optional(), {
             description: `deployment model session (${SESSIONS.join("|")})`,
@@ -508,7 +510,7 @@ export default defineCommand({
             }
             writeSession(flags.session);
         }
-        // stows.required + system.required flag edits — applied
+        // stow.depends + system.depends flag edits — applied
         // directly (they stand alone; apply/stow flows re-read them)
         if (flags["add-stows"] || flags["remove-stows"]) {
             const s = readStows();
@@ -518,7 +520,7 @@ export default defineCommand({
                 if (!s.packages.includes(p)) s.packages.push(p);
             }
             writeStows(s);
-            console.log(`configure: stows.required now: ${s.packages.join(" ")}`);
+            console.log(`configure: stow.depends now: ${s.packages.join(" ")}`);
         }
         if (flags["add-subs"] || flags["remove-subs"]) {
             const s = readSubs();
@@ -544,7 +546,7 @@ export default defineCommand({
                 else if (!existing.paths.includes(path)) existing.paths.push(path);
             }
             writeSubs(s);
-            console.log(`configure: system.required now ${s.entries.length} package line(s)`);
+            console.log(`configure: system.depends now ${s.entries.length} package line(s)`);
         }
         let credNotes: string[] | null = null;
         if (prompted) {
@@ -626,7 +628,7 @@ export default defineCommand({
                         return;
                     }
                     console.log("wizard: package install rules");
-                    // scope to the stows.required manifest — the individually
+                    // scope to the stow.depends manifest — the individually
                     // deployable packages (novnc/x11vnc/xrdp/xvfb…) must
                     // NOT be swept here: a blanket walk installs them AND
                     // then fails on their unstowed user units
@@ -638,7 +640,7 @@ export default defineCommand({
                         (pkg) => !manifest.includes(pkg),
                     );
                     if (skipped.length > 0) {
-                        console.log(`wizard: skipped (not in wm.required): ${skipped.join(" ")}`);
+                        console.log(`wizard: skipped (not in wm.depends): ${skipped.join(" ")}`);
                     }
                     const results: PkgResult[] = [];
                     for (const pkg of rules) {
