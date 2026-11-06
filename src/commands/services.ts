@@ -20,11 +20,12 @@ import {
     readServiceOrder, unitify, runServicesAction, SERVICES_ACTIONS,
     type ServicesAction,
 } from "../lib/services";
+import { echoHelpList } from "../lib/lines";
 
 export default defineCommand({
     name: "services",
     description:
-        "Run services.required units: check|start|stop|restart|status (systemd --user, --no-block, stow-safe disable)",
+        "Control services.required units over systemd (--user, --no-block, stow-safe disable)",
     options: {
         yes: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "no confirmation (non-interactive)",
@@ -37,9 +38,22 @@ export default defineCommand({
             console.error(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
-        const action = (positional[0] ?? "") as ServicesAction;
+        const raw = positional[0] ?? "";
+        if (raw === "help") {
+            echoHelpList("services", "usage\ton-deploy services <action> [--yes]", [
+                "check\treload + enable --now, no-op when active",
+                "start\treset-failed then start each unit",
+                "stop\tcancel jobs, drop the wants links, stop",
+                "restart\trestart each unit in the order",
+                "status\tis-active per unit",
+            ]);
+            process.exit(0);
+        }
+        const action = raw as ServicesAction;
         if (!SERVICES_ACTIONS.includes(action)) {
-            console.error(`services: usage: on-deploy services <${SERVICES_ACTIONS.join("|")}> [--yes]`);
+            console.error(`services: ${raw || "(no action)"} is not a services action`);
+            console.error("services:\tusage\ton-deploy services <action> [--yes]");
+            console.error("services:\thelp\ton-deploy services help");
             process.exit(2);
         }
         const order = readServiceOrder();

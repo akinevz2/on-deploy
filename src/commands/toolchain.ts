@@ -27,7 +27,7 @@ import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
 import { readRequires } from "../lib/dots";
 import { resolvePackage, runInstall, scriptExists, installed } from "../lib/deployScript";
-import { confirm } from "../lib/lines";
+import { confirm, echoHelpList } from "../lib/lines";
 
 interface Toolchain {
     /** the single binary that identifies the toolchain */
@@ -194,7 +194,7 @@ async function ensure(
 export default defineCommand({
     name: "toolchain",
     description:
-        "Install/verify a language toolchain the per-package Makefiles build with (--bun | --rustup); --check fail-fasts",
+        "Install the language toolchains for the adapters (--bun or --rustup; --check verifies)",
     options: {
         bun: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "ensure the bun toolchain (bunli/bun builds)",
@@ -214,14 +214,27 @@ export default defineCommand({
             description: "resolve + report, run nothing",
         }),
     },
-    handler: async ({ flags }) => {
+    handler: async ({ flags, positional }) => {
         const f = flags as Record<string, unknown>;
+        const raw = (positional ?? [])[0];
+        if (f.help || raw === "help") {
+            echoHelpList("toolchain", "usage\ton-deploy toolchain <key> [--check|--dry-run|--yes]", [
+                "bun\tenable the bun toolchain (bunli builds)",
+                "rustup\trustup default stable provides rustc + cargo",
+                "check\tverify only, installs nothing (exit 2)",
+                "dry-run\tresolve + report, run nothing",
+                "yes\tno confirmation prompts",
+            ]);
+            process.exit(0);
+        }
         const keys = Object.keys(TOOLCHAINS).filter((k) => f[k]);
         if (keys.length !== 1) {
-            console.error("toolchain: usage: on-deploy toolchain --bun|--rustup [--check|--dry-run|-y]");
+            console.error(`toolchain: the key ${keys[0] || "(none)"} is not a supported toolchain`);
+            console.error("toolchain:\tusage\ton-deploy toolchain <key> [--check|--dry-run|--yes]");
+            console.error("toolchain:\thelp\ton-deploy toolchain help");
             process.exit(2);
         }
         const key = keys[0];
-        await ensure(key, TOOLCHAINS[key], !!flags.check, !!flags["dry-run"], !!flags.yes);
+        await ensure(key, TOOLCHAINS[key], !!f.check, !!f["dry-run"], !!f.yes);
     },
 });

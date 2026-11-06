@@ -26,11 +26,13 @@
 //
 // Exit codes: 2 env/precondition, 1 any package rule failed, 0 ok.
 
+    // ── the per-package make run rides the SHARED pkgops spinner+async
 import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
 import { join } from "node:path";
 import { checkDotsEnv, DOTS_DIR } from "../lib/dots";
 import { runMakeSpun } from "../lib/pkgops";
+import { echoHelpList } from "../lib/lines";
 import {
     depsMakefile, submodulesByPackage, type PkgResult,
 } from "../lib/pkgops";
@@ -67,7 +69,7 @@ async function runDepsRuleSpun(pkg: string, rule: string, makeVars: string[]): P
 export default defineCommand({
     name: "depends",
     description:
-        "Sync the dots submodules and run the per-package depends Makefiles (--build/--install depth); bare = discovery report",
+        "Drive the adapter Makefiles: sync the submodules, build + install (--build|--install; bare prints the report)",
     options: {
         build: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "sync + run each package's Makefile `build` rule (toolchain + compile, no install)",
@@ -91,11 +93,22 @@ export default defineCommand({
             description: "report what would run, change nothing",
         }),
     },
-    handler: async ({ flags }) => {
+    handler: async ({ flags, positional }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
             console.error(`on-deploy: ${env.problem}`);
             process.exit(2);
+        }
+        const raw = (positional ?? [])[0] ?? "";
+        if (raw === "help") {
+            echoHelpList("depends", "usage\ton-deploy depends [--build|--install] [--only <pkgs>] [--force|--dry-run|--no-sync]", [
+                "install\tsync + build + install per package (--install)",
+                "build\tsync + build, nothing placed (--build)",
+                "bare\tthe discovery report: packages, submodules, Makefiles",
+                "only\tcomma/space-separated subset of packages",
+                "no-sync\trun only the Makefile rules — skip the git phase",
+            ]);
+            process.exit(0);
         }
         const mode = flags.install ? "install" : flags.build ? "build" : "";
         const dry = !!flags["dry-run"];
