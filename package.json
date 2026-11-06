@@ -1,6 +1,6 @@
 {
   "name": "on-deploy",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "description": "kine's dotfiles manager: handles and implements the doftiles Makefile deployment.",
   "type": "module",
   "bin": {
