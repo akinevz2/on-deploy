@@ -565,6 +565,10 @@ export default defineCommand({
                     // quit: the manifest stays as recorded and NOTHING is
                     // applied (the explicit "quit without saving" menu pick;
                     // re-run deploy to deploy an older recorded config)
+                    // the session MUST step down before returning — a live
+                    // renderer keeps the event loop alive and the beforeExit
+                    // dispose wedges (idle() never settles) → hung process
+                    await releaseTui();
                     console.log("configure: quit — recorded configuration kept");
                     return;
                 }
@@ -578,9 +582,13 @@ export default defineCommand({
                 if (go === null) {
                     // esc/ctrl-c at the wizard gate: hard cancel
                     console.log("configure: cancelled after save — deployment stopped");
+                    await releaseTui();
                     process.exit(130);
                 }
                 if (!go) {
+                    // saved without deploying: the session must step down
+                    // BEFORE returning (same hang class as the quit path)
+                    await releaseTui();
                     console.log("configure: saved (deployment skipped — re-run 'make install' to deploy)");
                     return;
                 }

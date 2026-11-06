@@ -466,7 +466,16 @@ function createSession(
                 activeRenderer.currentRenderBuffer.clear();
                 activeRenderer.nextRenderBuffer.clear();
                 activeRenderer.requestRender();
-                await activeRenderer.idle();
+                // idle() can WEDGE when called from the exit path (the
+                // event loop only drains once the renderer's timers die,
+                // so the awaited frame never settles) — bound it; the
+                // process must always reach destroy() and exit. This
+                // keeps the SIGTERM/SIGHUP kill trap honest too: a
+                // wedged dispose there would defeat process.exit.
+                await Promise.race([
+                    activeRenderer.idle(),
+                    new Promise((resolve) => setTimeout(resolve, 250)),
+                ]);
             }
 
             if (!activeRenderer.isDestroyed) activeRenderer.destroy();
