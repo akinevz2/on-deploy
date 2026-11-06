@@ -231,7 +231,15 @@ export default defineCommand({
             }
             const art = desc.artifact ? existsSync(join(process.env.HOME!, "dots", desc.artifact)) : false;
             const subOk = desc.subDir ? existsSync(join(process.env.HOME!, "dots", desc.subDir)) : true;
-            console.log(`  ${desc.pkg.padEnd(11)} ${registryOk ? "installed" : deployedState(desc)}`);
+            // query the installed binary for its version (extracting the
+            // semantic version from whatever banner it prints); falls
+            // back to bare "installed" when the binary can't answer
+            const versionOut = Bun.spawnSync([desc.pkg, "--version"]);
+            const versionMatch = versionOut.stdout.toString().match(/\d+\.\d+(\.\d+)?/);
+            const version = versionMatch ? versionMatch[0] : "";
+            const installedText = version ? `installed ${version}` : "installed";
+            const isInstalled = registryOk || deployedAlready(desc);
+            console.log(`  ${desc.pkg.padEnd(11)} ${isInstalled ? installedText : deployedState(desc)}`);
             console.log(`  ${"".padEnd(11)} artifact=${art ? "linked" : "none"}`);
             console.log(`  ${"".padEnd(11)} checkout=${subOk ? "present" : "missing"} method=${confGet(desc.key) || "(unset)"}`);
             return;
