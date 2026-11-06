@@ -1,7 +1,7 @@
 {
   "name": "on-deploy",
-  "version": "1.3.0",
-  "description": "The doftiles deployment orchestrator: verifies the wm.required binaries through the per-distro deploy scripts, drives the per-package depends Makefiles, and carries the services/configure verbs.",
+  "version": "1.4.0",
+  "description": "kine's dotfiles manager: handles and implements the doftiles Makefile deployment.",
   "type": "module",
   "bin": {
     "on-deploy": "src/index.ts"
