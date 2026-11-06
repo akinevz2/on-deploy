@@ -16,7 +16,11 @@ import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
 import { checkDotsEnv, readRequires } from "../lib/dots";
 import { resolvePackage } from "../lib/deployScript";
-import { targetPkg, targetPkgInstalled } from "../lib/provisioners";
+import {
+    familyPkgManager, PKG_MANAGER_ID, PKG_OP,
+    targetPkg, targetPkgInstalled,
+    type PkgOpKind, type TargetFamily,
+} from "../lib/provisioners";
 
 type Op = "installed" | "search" | "install" | "remove";
 
@@ -46,13 +50,14 @@ export default defineCommand({
             process.exit(2);
         }
         const { target } = await readRequires();
-        const pkgMgr = target === "arch" || target === "manjaro" ? "pacman" : "apt";
+        const family = target as TargetFamily | null;
+        const pkgMgr = familyPkgManager(family) ?? PKG_MANAGER_ID.apt;
         const dry = !!flags["dry-run"];
         let failed = 0;
 
         for (const name of names) {
             if (op === "installed") {
-                const on = targetPkgInstalled(pkgMgr, name);
+                const on = targetPkgInstalled({ pkgMgr, name });
                 console.log(`  ${name.padEnd(20)} ${on ? "installed" : "MISSING"}`);
                 if (!on) failed += 1;
                 continue;
@@ -67,19 +72,21 @@ export default defineCommand({
                 continue;
             }
             // install | remove: skip already-satisfied state on install
-            if (op === "install" && targetPkgInstalled(pkgMgr, name)) {
+            if (PKG_OP.install === op && targetPkgInstalled({ pkgMgr, name })) {
                 console.log(`  ${name.padEnd(20)} already installed`);
                 continue;
             }
             console.log(`  ${name.padEnd(20)} ${op}`);
-            const code = await targetPkg(pkgMgr, op as "install" | "remove", [name], !!flags.yes, dry);
+            const code = await targetPkg({
+                pkgMgr, op: op as PkgOpKind, names: [name], dry,
+            });
             if (code !== 0) {
                 console.error(`  ${name.padEnd(20)} FAILED (exit ${code})`);
                 failed += 1;
                 continue;
             }
             if (op === "install" && !dry) {
-                const on = targetPkgInstalled(pkgMgr, name);
+                const on = targetPkgInstalled({ pkgMgr, name });
                 console.log(`  ${name.padEnd(20)} ${on ? "installed" : "STILL MISSING"}`);
                 if (!on) failed += 1;
             }

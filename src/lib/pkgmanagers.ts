@@ -14,7 +14,7 @@
 // pacman, npm, bun...). The knob's record values are source | pkg only;
 // the registry below decides the concrete invocation:>
 //
-//   1. implement PkgManagerSpec below (id, available, installed, run)
+//   1. implement PkgManagerSpec below (id, available, installed, run[req])
 //      — `run` performs ONLY the package-manager invocation for the
 //      names it is GIVEN; it never invents names. A binary NAME that
 //      maps to a different installed package name goes through the
@@ -37,7 +37,12 @@
 //   - no spec ever hardcodes a dots package name: names come from the
 //     caller exactly like the pkg verb.
 
-import { targetPkg, targetPkgInstalled } from "./provisioners";
+import { targetPkg, targetPkgInstalled, PKG_MANAGER_ID, TARGET_FAMILY,
+    PKG_OP,
+    type PkgOpKind, type PkgManagerId, type TargetFamily,
+} from "./provisioners";
+export { PKG_MANAGER_ID, TARGET_FAMILY, PKG_OP };
+export type { PkgManagerId, TargetFamily, PkgOpKind };
 import { resolvePackage } from "./deployScript";
 
 /** ── supported enumeration ──────────────────────────────────────────────
@@ -46,35 +51,27 @@ import { resolvePackage } from "./deployScript";
  *  PkgManagerSpec in the registry (nothing else changes; `on-deploy
  *  supports` prints the result of this same catalog). */
 
-export const PKG_MANAGER_ID = {
-    apt: "apt",
-    pacman: "pacman",
-} as const;
-/** the concrete platform package-manager programs */
-export type PkgManagerId = keyof typeof PKG_MANAGER_ID;
-
-/** deploy target families (deployScript/targets implement them as the
- *  `<target>.deploy` protocol; the family decides which system transport
- *  is usable) */
-export const TARGET_FAMILY = {
-    debian: "debian",
-    ubuntu: "ubuntu",
-    arch: "arch",
-    manjaro: "manjaro",
-} as const;
-export type TargetFamily = keyof typeof TARGET_FAMILY;
-
 /** the JS registry transports (transport ids live in the same namespace
- *  as the package-manager ids — the knob value is managed:<id> either way) */
+ *  as the package-manager ids — the pkg method chooses BY the adapter
+ *  metadata's repos_pkg coverage) */
 export const REGISTRY_ID = {
     bun: "bun",
     npm: "npm",
 } as const;
 export type RegistryId = keyof typeof REGISTRY_ID;
 
+/** the transport's package-manager invocation REQUEST (a typed
+ *  object; no or-unions in the spec signatures) */
+export interface TransportRequest {
+    op: PkgOpKind;
+    names: string[];
+    /** dry-run prints instead of acting */
+    dry: boolean;
+}
+
 export interface PkgManagerSpec {
-    /** transport id — the knob value managed:<id> */
-    id: string;
+    /** transport id (typed in the supported catalog) */
+    id: PkgManagerId | RegistryId;
     /** platform family gate: when is this transport USABLE ("system"-
      *  transports are usable on their deploy target family only;
      *  registry transports are usable everywhere). undefined = any */
@@ -83,8 +80,8 @@ export interface PkgManagerSpec {
     available: () => boolean;
     /** is the given (resolved) name installed? */
     installed: (name: string) => boolean;
-    /** perform install/remove for the given names; dry-run prints */
-    run: (op: "install" | "remove", names: string[], dry: boolean) => Promise<number>;
+    /** perform the requested op for the given names; dry runs print */
+    run: (req: TransportRequest) => Promise<number>;
     /** how binary names resolve into installable names (undefined =
      *  the name IS the installable name — registry transports) */
     resolve?: (target: string | null, name: string) => Promise<string | null>;
@@ -127,14 +124,38 @@ const systemSpec = (id: PkgManagerId, families: TargetFamily[]): PkgManagerSpec 
     id,
     families,
     available: () => binOnPath(id),
-    installed: (name) => targetPkgInstalled(id, name),
-    run: async (op, names, dry) => await targetPkg(id, op, names, true, dry),
+    installed: (name) => targetPkgInstalled({ pkgMgr: id, name }),
+    run: async (req) => await targetPkg({ ...req, pkgMgr: id }),
     resolve: async (target, name) => {
         const res = await resolvePackage(target, name);
-        return res.ok ? res.pkg : null;
+        return res.ok && res.pkg ? res.pkg : null;
     },
     missing: `${id} not on PATH — not this deploy target's platform package manager?`,
 });
+
+/** the per-registry command argv dispatch (no inline bun/npm branching):
+ *  [install argv, remove argv] per registry transport */
+const REGISTRY_ARGV: Record<RegistryId, Record<PkgOpKind, string[]>> = {
+    [REGISTRY_ID.bun]: {
+        [PKG_OP.install]: ["bun", "add", "-g"],
+        [PKG_OP.remove]: ["bun", "remove", "-g"],
+    },
+    [REGISTRY_ID.npm]: {
+        [PKG_OP.install]: ["npm", "install", "--global"],
+        [PKG_OP.remove]: ["npm", "uninstall", "--global"],
+    },
+};
+
+/** one logical op: run a registry transport request */
+function registryRun(cmd: RegistryId, req: TransportRequest): Promise<number> {
+    const argv = REGISTRY_ARGV[cmd][req.op];
+    if (req.dry) {
+        console.log(`    [dry-run] ${argv.join(" ")} ${req.names.join(" ")}`);
+        return Promise.resolve(0);
+    }
+    const p = Bun.spawnSync([...argv, ...req.names], { stdout: "inherit", stderr: "inherit" });
+    return Promise.resolve(p.exitCode ?? 1);
+}
 
 /** bun — global registry installs (JS packages; respects the bun trust
  *  policy; run `bun pm trust -g <pkg>` when postinstalls stay blocked) */
@@ -142,17 +163,7 @@ const bunSpec: PkgManagerSpec = {
     id: REGISTRY_ID.bun,
     available: () => binOnPath(REGISTRY_ID.bun),
     installed: (name) => registryHas(REGISTRY_ID.bun, name),
-    run: (op, names, dry) => {
-        if (dry) {
-            console.log(`    [dry-run] bun ${op === "install" ? "add" : "remove"} -g ${names.join(" ")}`);
-            return Promise.resolve(0);
-        }
-        const argv = op === "install"
-            ? ["bun", "add", "-g", ...names]
-            : ["bun", "remove", "-g", ...names];
-        const p = Bun.spawnSync(argv, { stdout: "inherit", stderr: "inherit" });
-        return Promise.resolve(p.exitCode ?? 1);
-    },
+    run: (req) => registryRun(REGISTRY_ID.bun, req),
     resolve: resolveSelf,
     missing: "bun not on PATH — install the bun toolchain first (`on-deploy toolchain --bun`)",
 };
@@ -163,17 +174,7 @@ const npmSpec: PkgManagerSpec = {
     id: REGISTRY_ID.npm,
     available: () => binOnPath(REGISTRY_ID.npm),
     installed: (name) => registryHas(REGISTRY_ID.npm, name),
-    run: (op, names, dry) => {
-        if (dry) {
-            console.log(`    [dry-run] npm ${op === "install" ? "install" : "uninstall"} --global ${names.join(" ")}`);
-            return Promise.resolve(0);
-        }
-        const argv = op === "install"
-            ? ["npm", "install", "--global", ...names]
-            : ["npm", "uninstall", "--global", ...names];
-        const p = Bun.spawnSync(argv, { stdout: "inherit", stderr: "inherit" });
-        return Promise.resolve(p.exitCode ?? 1);
-    },
+    run: (req) => registryRun(REGISTRY_ID.npm, req),
     resolve: resolveSelf,
     missing: "npm not on PATH — install node/npm first",
 };

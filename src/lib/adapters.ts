@@ -16,8 +16,6 @@
 //                             valid; bat keeps its release route)
 //     repos_pkg=<name>        the dots package (stow) name
 //     repos_pkg_name=<name>   the deployment binary name (~/.local/bin)
-//     registry=<bool>         registry adapters (no dots artifact; the
-//                             tool lives in the transports)
 //
 // The branching does NOT live in the adapters: the METHOD RESOLUTION
 // (--method M > doftiles.conf record > source), the validity checks,
@@ -31,6 +29,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { TRANSPORTS, type PkgManagerSpec } from "./pkgmanagers";
 
 export const DOTS = join(process.env.HOME!, "dots");
 
@@ -113,6 +112,46 @@ function safeReposPkg(raw: Record<string, string>): string[] {
 /** metadata repos_pkg_name (positional 5) — the deployment name */
 function safeReposPkgName(raw: Record<string, string>, fallback: string): string {
     return raw.repos_pkg_name || fallback;
+}
+
+/** ── semantic helpers (the queries on the DESCRIPTOR; no call site ────
+    recomputes) ────────────────────────────────────────────────────────*/
+
+/** the deploy-state label for the status report */
+export function deployedState(desc: PkgDescriptor): string {
+    return deployedAlready(desc) ? "installed" : "MISSING";
+}
+
+/** artifact adapters place a dots-owned binary here; registry adapters
+ *  (herbstutil) never do, and their state is the transports' */
+export function artifactExists(desc: PkgDescriptor): boolean {
+    return desc.artifact ? existsSync(join(DOTS, desc.artifact)) : false;
+}
+
+function lookupTransportUnsafe(id: string): PkgManagerSpec | null {
+    return TRANSPORTS.find((t) => t.id === id) ?? null;
+}
+
+/** is `method` among the adapter's supported methods? source is
+ *  always valid (the contract); pkg additionally needs coverage */
+export function methodSupported(desc: PkgDescriptor, method: string): boolean {
+    if (method === "source") return true;
+    const specialized = desc.methods.filter((m) => m !== "source");
+    return specialized.includes(method) || (method === "pkg" && desc.reposPkg.length > 0);
+}
+
+/** is the package deployed already? (artifacts probe the dots-owned
+ *  file; registry-covered packages consult their repositories) */
+export function deployedAlready(desc: PkgDescriptor): boolean {
+    if (artifactExists(desc)) return true;
+    return desc.reposPkg
+        .map((id) => lookupTransportUnsafe(id))
+        .some((t) => !!t && t.installed(desc.installName));
+}
+
+export function registryTransportInstalled(id: string, name: string): boolean {
+    const found = lookupTransportUnsafe(id);
+    return found ? found.installed(name) : false;
 }
 
 /** consult an adapter's metadata contract: the adapter prints the FIVE

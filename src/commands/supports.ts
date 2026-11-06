@@ -21,7 +21,7 @@ export default defineCommand({
         console.log("on-deploy supports:");
         console.log(`  deploy target family : ${target ?? "(unknown)"}`);
         console.log("");
-        console.log("  managed transports (knob <PKG>=managed:<id>):");
+        console.log("  pkg-method transports (selected via the metadata repos_pkg):");
         for (const t of TRANSPORTS) {
             const usable = !t.families || (target !== null && t.families.includes(target as keyof typeof TARGET_FAMILY));
             const gate = t.families ? ` [families: ${t.families.join(", ")}]` : "";
@@ -30,7 +30,7 @@ export default defineCommand({
         }
         console.log("");
         console.log(`  registered ids : ${transportIds().join(" ")}`);
-        console.log("  knob syntax    : <PKG>=source | <PKG>=managed:<id>");
+        console.log("  knob syntax    : <PKG>=source|pkg");
         console.log("  extend support : lib/pkgmanagers.ts — implement PkgManagerSpec, append to TRANSPORTS");
         console.log(`  families       : ${Object.keys(TARGET_FAMILY).join(" ")}`);
     },

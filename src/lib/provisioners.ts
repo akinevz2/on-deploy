@@ -34,30 +34,96 @@ export interface Step {
     problem?: string;
 }
 
-/** is the deploy target package `<pkg>` installed? (dpkg-query | pacman -Qi
- *  — resolved by the target family the CALLER passes; no package names
- *  live here) */
-export function targetPkgInstalled(pkgMgr: "apt" | "pacman", pkg: string): boolean {
-    if (pkgMgr === "pacman") return sh("pacman", ["-Qi", pkg]).code === 0;
-    const q = sh("dpkg-query", ["-W", "-f=${Status}", pkg]);
-    return q.code === 0 && q.out.includes("install ok installed");
+/** is the deploy target package `<pkg>` installed? (dpkg-query |
+ *  pacman -Qi — resolved by the target family the CALLER passes; no
+ *  package names live here)
+ *  The PKG MANAGER + OPERATION arguments are TYPED OBJECTS (no inline
+ *  or-unions in signatures — extending the support matrix happens in
+ *  the catalog/file below). */
+export const PKG_MANAGER_ID = {
+    apt: "apt",
+    pacman: "pacman",
+} as const;
+export type PkgManagerId = keyof typeof PKG_MANAGER_ID;
+
+/** the generic package op (install/remove); operations extend here */
+export const PKG_OP = {
+    install: "install",
+    remove: "remove",
+} as const;
+export type PkgOpKind = keyof typeof PKG_OP;
+
+/** deploy target families (deployScript/targets implement them as the
+ *  `<target>.deploy` protocol; the family decides which system
+ *  transport is usable) */
+export const TARGET_FAMILY = {
+    debian: "debian",
+    ubuntu: "ubuntu",
+    arch: "arch",
+    manjaro: "manjaro",
+} as const;
+export type TargetFamily = keyof typeof TARGET_FAMILY;
+
+export interface TargetPkgInstalledRequest {
+    pkgMgr: PkgManagerId;
+    name: string;
+}
+
+export interface TargetPkgRequest {
+    pkgMgr: PkgManagerId;
+    op: PkgOpKind;
+    names: string[];
+    /** interactive confirmations gate (the caller owns --yes) */
+    dry: boolean;
+}
+
+/** ── the static dispatch maps (per package manager; per family) ──────
+ *  adding a platform = adding a row HERE + provisioning a systemSpec
+ *  in pkgmanagers; no ternary edits anywhere */
+const TARGET_PKG_ARGV: Record<PkgManagerId, Record<PkgOpKind, string[]>> = {
+    [PKG_MANAGER_ID.apt]: {
+        [PKG_OP.install]: ["install", "-y"],
+        [PKG_OP.remove]: ["remove", "-y"],
+    },
+    [PKG_MANAGER_ID.pacman]: {
+        [PKG_OP.install]: ["-S", "--needed"],
+        [PKG_OP.remove]: ["-R"],
+    },
+};
+
+const TARGET_PKG_PROBE: Record<PkgManagerId, (name: string) => boolean> = {
+    [PKG_MANAGER_ID.apt]: (name) => {
+        const q = sh("dpkg-query", ["-W", "-f=${Status}", name]);
+        return q.code === 0 && q.out.includes("install ok installed");
+    },
+    [PKG_MANAGER_ID.pacman]: (name) => sh("pacman", ["-Qi", name]).code === 0,
+};
+
+/** the deploy target family -> its platform package manager */
+const FAMILY_PKG_MGR: Record<TargetFamily, PkgManagerId> = {
+    [TARGET_FAMILY.debian]: PKG_MANAGER_ID.apt,
+    [TARGET_FAMILY.ubuntu]: PKG_MANAGER_ID.apt,
+    [TARGET_FAMILY.arch]: PKG_MANAGER_ID.pacman,
+    [TARGET_FAMILY.manjaro]: PKG_MANAGER_ID.pacman,
+};
+
+/** the platform package manager for a deploy target family (null when
+ *  the family is unknown/unsupported) */
+export function familyPkgManager(family: string | null | undefined): PkgManagerId | null {
+    if (!family) return null;
+    return family in FAMILY_PKG_MGR ? FAMILY_PKG_MGR[family as TargetFamily] : null;
+}
+
+export function targetPkgInstalled(req: TargetPkgInstalledRequest): boolean {
+    return TARGET_PKG_PROBE[req.pkgMgr](req.name);
 }
 
 /** the deploy target package-manager install/remove invocation for the
  *  NAMES the caller passes */
-export async function targetPkg(
-    pkgMgr: "apt" | "pacman", op: "install" | "remove",
-    names: string[], yes: boolean, dryRun: boolean,
-): Promise<number> {
-    if (names.length === 0) return 0;
-    if (op === "install") {
-        const args = pkgMgr === "pacman"
-            ? ["-S", "--needed", ...names]
-            : ["install", "-y", ...names];
-        return sudo(pkgMgr, args, dryRun);
-    }
-    const args = pkgMgr === "pacman" ? ["-R", ...names] : ["remove", "-y", ...names];
-    return sudo(pkgMgr, args, dryRun);
+export async function targetPkg(req: TargetPkgRequest): Promise<number> {
+    if (req.names.length === 0) return 0;
+    const argv = [...TARGET_PKG_ARGV[req.pkgMgr][req.op], ...req.names];
+    return sudo(req.pkgMgr, argv, req.dry);
 }
 
 /** verifyWslSession — the WSL session verify: the external X server

@@ -4,16 +4,16 @@
 // The adapters declare package-specific VARIABLES (the metadata
 // contract in lib/adapters.ts) and keep only concrete step recipes:
 //
-//     method resolution: --method M > doftiles.conf record > default
-//     ("none" = unset), fallback when the source route's toolchain is
-//     missing (the adapter declares its `fallback`)
-//     validity check against the adapter's methods set
-//     managed:<id> → the registered package-manager transports
-//         (lib/pkgmanagers.ts) in-process: family gates, the
-//         <target>.deploy binary-name resolution for system transports
-//     source | release | ... → the adapter's own recipes
+//     method resolution: --method M > doftiles.conf record > source
+//     ("none" = unset)
+//     validity check against the adapter's metadata methods_supported
+//     pkg → the repositories from metadata repos_pkg (registry bun/npm
+//         first, then the deploy target's platform package manager —
+//         lib/pkgmanagers.ts in-process: family gates, the
+//         <target>.deploy binary-name resolution for system transports)
+//     source → the adapter's own install-source recipe
 //     the conf record update (through the repo-stowed doftiles.conf)
-//     stow via pkgops, with the legacy regular-file swap
+//     stow via pkgops when the adapter really produced a dots artifact
 //
 // VERB SURFACE (the adapters' target table, preserved):
 //
@@ -34,10 +34,17 @@ import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { consult, confGet, confSet, type PkgDescriptor } from "../lib/adapters";
+import {
+    consult, confGet, confSet, deployedAlready, deployedState, methodSupported,
+    registryTransportInstalled,
+    type PkgDescriptor,
+} from "../lib/adapters";
 import { pkgMakefile, stowPkg, swapArtifact, unstowPkg } from "../lib/pkgops";
-import { lookupTransport, type TargetFamily } from "../lib/pkgmanagers";
+import { lookupTransport } from "../lib/pkgmanagers";
 import { readRequires } from "../lib/dots";
+import {
+    familyPkgManager, PKG_OP, type TargetFamily,
+} from "../lib/provisioners";
 
 interface MakeResult { ok: boolean; lines: string[] }
 
@@ -61,8 +68,10 @@ async function pkgTransport(desc: PkgDescriptor, family: string | null) {
         return { spec: found.spec, id, installable: desc.installName };
     }
     if (family) {
-        const sysId = family === "arch" || family === "manjaro" ? "pacman" : "apt";
-        const found = lookupTransport(sysId, family as TargetFamily);
+        const sysId = familyPkgManager(family);
+        const found = sysId
+            ? lookupTransport(sysId, family as TargetFamily)
+            : null;
         if (found?.spec?.available()) {
             const resolved = found.spec.resolve
                 ? await found.spec.resolve(family, desc.installName)
@@ -88,7 +97,7 @@ async function runPkg(desc: PkgDescriptor, family: string | null, args: MethodAr
         return { ok: true, lines };
     }
     lines.push(`  ${desc.pkg.padEnd(11)} install (${t.id}${t.installable !== desc.installName ? ` via ${t.installable}` : ""})`);
-    return { ok: (await t.spec.run("install", [t.installable], args.dry)) === 0, lines };
+    return { ok: (await t.spec.run({ op: PKG_OP.install, names: [t.installable], dry: args.dry })) === 0, lines };
 }
 
 /** resolve: --method M > conf record > source; none = unset */
@@ -207,22 +216,19 @@ export default defineCommand({
         }
 
         if (op === "status") {
-            // binary adapters probe the deploy-point artifact; packages
-            // whose registry carry them (herbstutil) consult transports
+            const registryCovered = desc.artifact
+                ? !existsSync(join(process.env.HOME!, "dots", desc.artifact))
+                : true;
             let registryOk = false;
-            if (desc.artifact && !existsSync(join(process.env.HOME!, "dots", desc.artifact))) {
+            if (registryCovered) {
                 for (const id of desc.reposPkg) {
-                    const found = lookupTransport(id);
-                    if (found && found.spec.installed(desc.installName)) { registryOk = true; break; }
+                    if (registryTransportInstalled(id, desc.installName)) { registryOk = true; break; }
                 }
             }
-            const installed = (desc.artifact
-                ? existsSync(join(process.env.HOME!, "dots", desc.artifact)) || existsSync(join(process.env.HOME!, ".local", "bin", desc.installName))
-                : false) || registryOk;
             const art = desc.artifact ? existsSync(join(process.env.HOME!, "dots", desc.artifact)) : false;
             const subOk = desc.subDir ? existsSync(join(process.env.HOME!, "dots", desc.subDir)) : true;
-            console.log(`  ${desc.pkg.padEnd(11)} ${installed ? "installed" : "MISSING"}`);
-            console.log(`  ${"".padEnd(11)} artifact=${art ? "linked" : (desc.artifact ? "none" : "n/a (registry)")}`);
+            console.log(`  ${desc.pkg.padEnd(11)} ${registryOk ? "installed" : deployedState(desc)}`);
+            console.log(`  ${"".padEnd(11)} artifact=${art ? "linked" : "none"}`);
             console.log(`  ${"".padEnd(11)} checkout=${subOk ? "present" : "missing"} method=${confGet(desc.key) || "(unset)"}`);
             return;
         }
@@ -235,7 +241,7 @@ export default defineCommand({
             if (prior === "pkg") {
                 const t = await pkgTransport(desc, family);
                 if (t) {
-                    const rc = await t.spec.run("remove", [t.installable], false);
+                    const rc = await t.spec.run({ op: PKG_OP.remove, names: [t.installable], dry: false });
                     if (rc !== 0) { console.error(`managed: ${desc.pkg}: transport remove FAILED (${t.id})`); process.exit(1); }
                 }
             }
@@ -249,19 +255,8 @@ export default defineCommand({
 
         if (op === "install") {
             // the deployed-already guard (unless --force/--method)
-            const artifactOk = desc.artifact
-                ? existsSync(join(process.env.HOME!, "dots", desc.artifact))
-                : false;
-            if (artifactOk && !args.force && !args.method) {
-                console.log(`  ${desc.pkg.padEnd(11)} ok (method=${confGet(desc.key) || "source"} — skipping)`);
-                console.log(`  ${"".padEnd(11)} --force redeploys`);
-                return;
-            }
             const resolved = resolveMethod(desc, args);
-            const covered = resolved === "pkg"
-                ? desc.methods.includes("pkg") && desc.reposPkg.length > 0
-                : desc.methods.includes(resolved);
-            if (!covered) {
+            if (!methodSupported(desc, resolved)) {
                 console.error(`managed: ${desc.pkg}: unknown method '${resolved}' (methods_supported: ${desc.methods.join(" ")})`);
                 process.exit(2);
             }
