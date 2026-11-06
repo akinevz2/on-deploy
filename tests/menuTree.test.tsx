@@ -5,12 +5,12 @@
 // tests drive keys by emitting on the renderer's keyInput exactly like
 // a terminal would:
 //
-//   j / down  → adjacent visible row
-//   enter     → folder folds | single picks | multi submits
-//   space     → toggle check (multi)
-//   o         → toggle fold: children ATTACH after the folder row and
-//               DETACH on fold again (DOM order via add(obj, index))
-//   ctrl+a    → check/uncheck all (multi)
+//	j / down	→ adjacent visible row
+//	enter	→ folder folds | single picks | multi submits
+//	space	→ toggle check (multi)
+//	o	→ toggle fold: children ATTACH after the folder row and
+//	DETACH on fold again (DOM order via add(obj, index))
+//	ctrl+a	→ check/uncheck all (multi)
 //
 // The listener-balance guarantee is pinned by tests/listener.test.tsx;
 // here the mediator's own behavior contract is what matters.

@@ -8,26 +8,26 @@
 // sweep). The patch is GONE: the runtimes/dependencies are pristine and
 // the machinery lives HERE instead.
 //
-//  1. ONE long-lived renderer AND one react root; the ONLY keypress
-//     listener attached for the whole session lifetime is the
-//     dispatcher registered at initialize (never per prompt).
-//  2. The views (lib/tuiMenuTree.tsx) are framework-native:
+//	1. ONE long-lived renderer AND one react root; the ONLY keypress
+//	listener attached for the whole session lifetime is the
+//	dispatcher registered at initialize (never per prompt).
+//	2. The views (lib/tuiMenuTree.tsx) are framework-native:
 //     navigation/activation happen inside the FOCUSED renderable's own
-//     handleKeyPress (the framework attaches it on focus() and removes
-//     it on blur()) — no react-managed key handlers anywhere; the
-//     multiselect is a FoldButton tree with state in a plain mediator.
-//  3. Signal discipline is DEFINED here: esc and ctrl-c cancel the
-//     active prompt; ctrl-c with the session idle EXITS the process
+//	handleKeyPress (the framework attaches it on focus() and removes
+//	it on blur()) — no react-managed key handlers anywhere; the
+//	multiselect is a FoldButton tree with state in a plain mediator.
+//	3. Signal discipline is DEFINED here: esc and ctrl-c cancel the
+//	active prompt; ctrl-c with the session idle EXITS the process
 //     (130) so make stops; ctrl-d keeps the focused editor's native
-//     bindings (input edit / textarea delete) and cancels a menu
-//     prompt otherwise. SIGTERM/SIGHUP (kill, systemd stop, hangup)
-//     tear the TUI down BEFORE exiting, so the shell never gets a
-//     raw-mode/alien-screen terminal back.
-//  4. Purity: the session internals are CONST once born — every
+//	bindings (input edit / textarea delete) and cancels a menu
+//	prompt otherwise. SIGTERM/SIGHUP (kill, systemd stop, hangup)
+//	tear the TUI down BEFORE exiting, so the shell never gets a
+//	raw-mode/alien-screen terminal back.
+//	4. Purity: the session internals are CONST once born — every
 //     late-bound slot lives in the `live` cell record and is mutated
 //     only through it; there is no bare `let` inside the session
-//     (module-level _session/sessionState are the two documented
-//     singletons and the only rebinds).
+//	(module-level _session/sessionState are the two documented
+//	singletons and the only rebinds).
 //
 // Component framework note: the focused renderable sees keys through
 // its framework wiring; it does not reach this dispatcher's decisions,
@@ -140,9 +140,9 @@ export interface OnDeploySession {
 }
 
 /** the two documented module rebinds: the process-lifetime session
- *  (created lazily) and its coarse phase. Everything INSIDE a session
+ * (created lazily) and its coarse phase. Everything INSIDE a session
  *  is const (the `live` cell record); tests re-enter createSession and
- *  must not inherit the previous phases, hence the resets on birth. */
+ * must not inherit the previous phases, hence the resets on birth. */
 type Phase = "unborn" | "idle" | "prompt" | "disposed";
 let sessionState: Phase = "unborn";
 
@@ -184,9 +184,9 @@ type RendererT = Awaited<ReturnType<typeof createCliRenderer>>;
 type RootT = ReturnType<typeof createRoot>;
 
 /** the birth-once slots of one session — every renderer-adjacent
- *  assignment is a well-known cell, mutated ONLY by the initialize /
+ * assignment is a well-known cell, mutated ONLY by the initialize /
  *  settle / dispose flows below. A plain record: assignment can't leak
- *  the way numbers of copied listener refs could. */
+ * the way numbers of copied listener refs could. */
 interface Live {
     /** the green renderer (undefined until initialize first runs) */
     renderer?: RendererT;
@@ -197,7 +197,7 @@ interface Live {
     /** the ACTIVE prompt's render throttler */
     render?: () => void;
     /** the cancel resolver of the ACTIVE prompt — read directly by the
-     *  dispatcher and the SIGINT gate */
+     * dispatcher and the SIGINT gate */
     cancel?: () => void;
 }
 

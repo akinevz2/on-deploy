@@ -7,10 +7,10 @@
 // Cancel (esc/q? no — esc only, plus ctrl-c, plus ctrl-d in menus)
 // maps to null/false, exactly the whiptail-era contract:
 //
-//   tuiSelect(msg, items)      → item | null (cancelled)
-//   tuiChecklist(msg, items)   → T[] | null
-//   tuiYesNo(msg, initialValue)→ boolean | null
-//   tuiText(msg, opts)         → string | null
+//	tuiSelect(msg, items)	→ item | null (cancelled)
+//	tuiChecklist(msg, items)	→ T[] | null
+//	tuiYesNo(msg, initialValue)→ boolean | null
+//	tuiText(msg, opts)	→ string | null
 //
 // Non-TTY callers are gated (return null instead of blocking).
 

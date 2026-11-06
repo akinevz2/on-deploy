@@ -10,11 +10,11 @@
 // per prompt, so the react-unmount listener leak class cannot occur.
 //
 // Keys per button:
-//   enter → folder folds / single-mode picks / check-mode submits
-//   space → toggle the check (check rows only)
-//   o     → toggle fold on a folder row (children attach/detach)
+//	enter → folder folds / single-mode picks / check-mode submits
+//	space → toggle the check (check rows only)
+//	o	→ toggle fold on a folder row (children attach/detach)
 //   up/down/j/k → adjacent VISIBLE row (collapsed subtrees don't
-//   break adjacency); disabled rows are stepped over
+//	break adjacency); disabled rows are stepped over
 //
 // React renders ONLY the shell (message, row container, hint). The
 // MenuTree mediator (plain JS) owns ALL state — rows, checks, folds,

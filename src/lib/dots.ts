@@ -21,8 +21,8 @@ function sh(cmd: string, args: string[], cwd?: string): { code: number; out: str
 
 /** a) the process must run inside ~/dots (walk-up: any SUBDIRECTORY of
  *  the repo is accepted — package Makefiles `make -C` into
- *  dots/<pkg>/.local/share/<pkg> and still call on-deploy); b) origin
- *  must be doftiles. */
+ * dots/<pkg>/.local/share/<pkg> and still call on-deploy); b) origin
+ * must be doftiles. */
 export function checkDotsEnv(): EnvCheck {
     let cwd = process.cwd();
     if (cwd !== DOTS_DIR) {

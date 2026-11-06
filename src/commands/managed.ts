@@ -4,27 +4,27 @@
 // The adapters declare package-specific VARIABLES (the metadata
 // contract in lib/adapters.ts) and keep only concrete step recipes:
 //
-//     method resolution: --method M > doftiles.conf record > source
+//	method resolution: --method M > doftiles.conf record > source
 //     ("none" = unset)
 //     validity check against the adapter's metadata methods_supported
-//     pkg → the repositories from metadata repos_pkg (registry bun/npm
+//	pkg → the repositories from metadata repos_pkg (registry bun/npm
 //         first, then the deploy target's platform package manager —
-//         lib/pkgmanagers.ts in-process: family gates, the
-//         <target>.deploy binary-name resolution for system transports)
+//	lib/pkgmanagers.ts in-process: family gates, the
+//	<target>.deploy binary-name resolution for system transports)
 //     source → the adapter's own install-source recipe
-//     the conf record update (through the repo-stowed doftiles.conf)
-//     stow via pkgops when the adapter really produced a dots artifact
+//	the conf record update (through the repo-stowed doftiles.conf)
+//	stow via pkgops when the adapter really produced a dots artifact
 //
 // VERB SURFACE (the adapters' target table, preserved):
 //
-//   routed here     install, uninstall, status, conf-get, conf-set,
-//                   start/stop/enable/disable (common no-ops)
-//   passthrough     toolchain, build, link, install-source,
-//                   install-release, trust-local, trust-global — any
-//                   other op is a plain make target on the adapter
-//   consult         metadata (prints the one-line summary)
+//	routed here	install, uninstall, status, conf-get, conf-set,
+//	start/stop/enable/disable (common no-ops)
+//	passthrough	toolchain, build, link, install-source,
+//	install-release, trust-local, trust-global — any
+//	other op is a plain make target on the adapter
+//	consult	metadata (prints the one-line summary)
 //
-//   on-deploy managed <pkg> <op> [--method M] [--force] [--dry-run]
+//	on-deploy managed <pkg> <op> [--method M] [--force] [--dry-run]
 //
 // The adapters' install/uninstall targets stay the make-level interface
 // (the depends walk keeps calling them); their body is a delegation.
@@ -60,7 +60,7 @@ const COMMON_NOOPS = new Set(["start", "stop", "enable", "disable"]);
 /** the package-manager transport resolution for the `pkg` method —
  *  driven by the adapter's repos_pkg coverage list (bun, npm before
  *  the deploy target's system package manager; unavailable ones step
- *  aside, and an empty repos_pkg fails cleanly) */
+ * aside, and an empty repos_pkg fails cleanly) */
 async function pkgTransport(desc: PkgDescriptor, family: string | null) {
     for (const id of desc.reposPkg) {
         const found = lookupTransport(id);

@@ -1,12 +1,12 @@
 // src/commands/detect-server.ts — probe a REACHABLE X server and expose
 // the result.
 //
-//   on-deploy detect-server
-//   on-deploy detect-server <address>
-//   on-deploy detect-server --persist-to-systemd
-//   on-deploy detect-server --persist-to-env=<file>
-//   on-deploy detect-server <address> --persist-to-env=/etc/rc.d/x11-display
-//   ... --dry-run: print what would be persisted, change nothing
+//	on-deploy detect-server
+//	on-deploy detect-server <address>
+//	on-deploy detect-server --persist-to-systemd
+//	on-deploy detect-server --persist-to-env=<file>
+//	on-deploy detect-server <address> --persist-to-env=/etc/rc.d/x11-display
+//	... --dry-run: print what would be persisted, change nothing
 //
 // Success prints the display string ("localhost:0.0" notation) on stdout;
 // exit 0 = reachable, exit 1 = probe failed, exit 2 = usage. Stdout carries
@@ -17,16 +17,16 @@
 // wrapped in quotes in every generated line so the persisted env is safe.
 //
 // Persistence:
-//   --persist-to-systemd  if systemd is present, ALSO set the variable in
+//	--persist-to-systemd	if systemd is present, ALSO set the variable in
 //                         the user manager's environment (systemctl --user
-//                         set-environment DISPLAY=<d>) so all user units
-//                         inherit it. No-op + exit 1 when systemd is absent
-//                         (SysV targets must not turn this into a fatal).
-//   --persist-to-env=<f>  ALSO write an executable sh snippet
+//	set-environment DISPLAY=<d>) so all user units
+//	inherit it. No-op + exit 1 when systemd is absent
+//	(SysV targets must not turn this into a fatal).
+//	--persist-to-env=<f>	ALSO write an executable sh snippet
 //                         (chmod 755) with `export DISPLAY="<d>"` so SysV
-//                         rc.d scripts can include it from anywhere:
-//                             . /etc/rc.d/x11-display
-//                         (it is sourced; it may also be executed directly.)
+//	rc.d scripts can include it from anywhere:
+//	. /etc/rc.d/x11-display
+//	(it is sourced; it may also be executed directly.)
 //
 // Probe order without <address>: inherited $DISPLAY, localhost:0.0,
 // localhost:1.0, :0, :1 — the shared detectDisplay (also rewrites the
@@ -38,7 +38,7 @@ import { existsSync, writeFileSync, chmodSync } from "node:fs";
 import { detectDisplay, sh } from "../lib/provisioners";
 
 /** probeAddress — true when `xset q -display <d>` answers within 2s
- *  (timeout guards the half-open VcXsrv-connection hang). */
+ * (timeout guards the half-open VcXsrv-connection hang). */
 function probeAddress(d: string): boolean {
     const xset = sh("sh", ["-c", "command -v xset"]).out;
     if (!xset) return false;
@@ -47,7 +47,7 @@ function probeAddress(d: string): boolean {
 
 /** persistSystemd — set DISPLAY in the systemd user manager environment.
  *  Detects systemd by binary presence + an answering `systemctl --user`;
- *  returns a stderr-explained failure rather than throwing on SysV. */
+ * returns a stderr-explained failure rather than throwing on SysV. */
 function persistSystemd(display: string): boolean {
     if (!sh("sh", ["-c", "command -v systemctl"]).out) {
         console.error("detect-server: systemd not present — skipping --persist-to-systemd");

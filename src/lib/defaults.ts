@@ -5,10 +5,10 @@
 // provides the generic archive/unarchive mechanics only — no
 // per-package code here.
 //
-//   archive <pkg>    copy $HOME/<rel> (when NOT dots-owned) into
-//                    defaults/<rel> for every file of package <pkg>
-//   unarchive <pkg>  copy defaults/<rel> back into $HOME (restore),
-//                    never overwriting a dots-owned file
+//	archive <pkg>	copy $HOME/<rel> (when NOT dots-owned) into
+//	defaults/<rel> for every file of package <pkg>
+//	unarchive <pkg>	copy defaults/<rel> back into $HOME (restore),
+//	never overwriting a dots-owned file
 //
 // rel is relative to the PACKAGE (stow mirrors $HOME); the defaults/
 // package is NOT stowed by install.
@@ -50,7 +50,7 @@ export function isDotsOwned(homePath: string, dots: string): boolean {
 export interface ArchiveRow { rel: string; kind: string }
 
 /** ARCHIVE: copy the not-dots-owned $HOME versions of the package's
- *  files into defaults/. Returns the collected rows. */
+ * files into defaults/. Returns the collected rows. */
 export function archivePackage(dots: string, pkg: string, dryRun: boolean): ArchiveRow[] {
     const pkgDir = join(dots, pkg);
     const defaults = join(dots, DEFAULTS_DIR_NAME);
@@ -73,8 +73,8 @@ export function archivePackage(dots: string, pkg: string, dryRun: boolean): Arch
 }
 
 /** UNARCHIVE: restore defaults/<rel> back into $HOME — only where the
- *  live path is NOT dots-owned (never clobber a deployed file).
- *  Returns the restored rels. */
+ * live path is NOT dots-owned (never clobber a deployed file).
+ * Returns the restored rels. */
 export function unarchivePackage(dots: string, pkg: string, dryRun: boolean): string[] {
     const pkgDir = join(dots, pkg);
     const defaults = join(dots, DEFAULTS_DIR_NAME);

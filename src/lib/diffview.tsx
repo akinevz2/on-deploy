@@ -4,16 +4,16 @@
 // tsconfig sets jsx=react-jsx + jsxImportSource=@opentui/react).
 //
 // Colorscheme (the herbst theme family — reload_theme / alacritty):
-//   ubuntu magenta   #a55eea   headers, accents
-//   ubuntu aubergine #2c001e   background (the herbst BACKGROUND_HEX)
-//   golden yellow    #feef69   highlights, the added-line marker
+//	ubuntu magenta	#a55eea	headers, accents
+//	ubuntu aubergine #2c001e	background (the herbst BACKGROUND_HEX)
+//	golden yellow	#feef69	highlights, the added-line marker
 //   white            #eeeeee   body text (theme's frame inner)
-//   gray             #333333   chrome: borders, footer, captions
+//	gray	#333333	chrome: borders, footer, captions
 //
 // Keys:
-//   d / space   toggle side-by-side <-> inline (unified) diff
-//   up/down     line scroll
-//   q / escape  close (the per-file decision menu resumes)
+//	d / space	toggle side-by-side <-> inline (unified) diff
+//	up/down	line scroll
+//	q / escape	close (the per-file decision menu resumes)
 //
 // Feeding it: two pre-computed texts pass in — the side-by-side rows
 // (diff -y, left/right pairs) and the unified lines (git diff

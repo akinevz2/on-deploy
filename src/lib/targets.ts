@@ -5,11 +5,11 @@
 // `session = <model>` line, target line) and runs that target's
 // GENERIC step list. The three stabilized implementations:
 //
-//   debian-wsl   x server EXTERNAL (the Windows-side VcXsrv app);
-//                hlwm runs as the systemd user unit herbst.service —
-//                provision verifies, never installs an X server
-//   debian       x server MANAGED (apt)
-//   archlinux    x server MANAGED (pacman)
+//	debian-wsl	x server EXTERNAL (the Windows-side VcXsrv app);
+//	hlwm runs as the systemd user unit herbst.service —
+//	provision verifies, never installs an X server
+//	debian	x server MANAGED (apt)
+//	archlinux	x server MANAGED (pacman)
 //
 // NO package names and NO per-package behavior live here (or anywhere
 // in on-deploy): the package GROUPS (X server stack, nested stack,
@@ -61,9 +61,9 @@ export interface TargetStep {
 }
 
 /** The ordered GENERIC step list for the deploy target: (wsl:
- *  vcxsrv + session verify). Package-group setup is NOT here — it
- *  lives in the package Makefiles; unit enabling belongs to the dots
- *  services flow (services.required / package Makefiles). */
+ * vcxsrv + session verify). Package-group setup is NOT here — it
+ * lives in the package Makefiles; unit enabling belongs to the dots
+ * services flow (services.required / package Makefiles). */
 export function targetSteps(p: DeployTarget, dry: boolean): TargetStep[] {
     const steps: TargetStep[] = [];
     if (p.externalXServer) {

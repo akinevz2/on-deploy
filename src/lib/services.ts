@@ -41,7 +41,7 @@ export function unitify(names: string[]): string[] {
 }
 
 /** run a services action over EXPLICIT unit names (no confirmation —
- *  the caller owns it). Returns the failure count. */
+ * the caller owns it). Returns the failure count. */
 export function runServicesAction(action: ServicesAction, units: string[]): number {
     let failed = 0;
     if (action === "check") {

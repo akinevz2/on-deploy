@@ -4,13 +4,13 @@
 // unregister round-trip for BOTH emitter listeners and PROCESS signal
 // handlers is exactly balanced:
 //
-//   keyInput keypress listeners: baseline at birth → unchanged while a
-//     prompt mounts → unchanged after it settles (the fold-button views
+//	keyInput keypress listeners: baseline at birth → unchanged while a
+//	prompt mounts → unchanged after it settles (the fold-button views
 //     receive keys through the framework's FOCUS wiring, not
-//     subscriptions; nothing accumulates);
-//   process SIGINT handlers: zero at baseline → +1 at session birth
-//     (idle guard) → +1 while a prompt runs → back to +1 after settle
-//     → 0 after dispose.
+//	subscriptions; nothing accumulates);
+//	process SIGINT handlers: zero at baseline → +1 at session birth
+//	(idle guard) → +1 while a prompt runs → back to +1 after settle
+//	→ 0 after dispose.
 //
 // The old MaxListenersExceeded regression (per-prompt useKeyboard
 // accumulation, "fixed" with a listening sweep inside vendored

@@ -3,13 +3,13 @@
 // dots/<pkg>/.local/state/depends/<pkg>.Makefile, with the legacy
 // dots/<pkg>/.local/share/<pkg>/Makefile hook as fallback).
 //
-//   on-deploy packages <rule> [pkg...]     run a rule on some packages
-//   on-deploy packages <rule>              run it on EVERY package
-//                                          that has the Makefile
-//   on-deploy packages list                which packages have one
+//	on-deploy packages <rule> [pkg...]	run a rule on some packages
+//	on-deploy packages <rule>	run it on EVERY package
+//	that has the Makefile
+//	on-deploy packages list	which packages have one
 //
 // Rules are the standard set the package Makefiles implement:
-//   install | start | stop | uninstall | status | disable | enable
+//	install | start | stop | uninstall | status | disable | enable
 // plus whatever extra rules a package defines (archive/unarchive
 // helpers from on-deploy may be called by those rules — on-deploy
 // itself carries NO per-package code, only per-target code; the
@@ -29,8 +29,8 @@ export const STANDARD_RULES = [
 ] as const;
 
 /** every package that ships a dependency Makefile (the depends scheme
- *  dots/<pkg>/.local/state/depends/<pkg>.Makefile preferred; the legacy
- *  dots/<pkg>/.local/share/<pkg>/Makefile hook as fallback) */
+ * dots/<pkg>/.local/state/depends/<pkg>.Makefile preferred; the legacy
+ * dots/<pkg>/.local/share/<pkg>/Makefile hook as fallback) */
 export function packagesWithMakefiles(dots: string): string[] {
     const out: string[] = [];
     for (const name of readdirSync(dots, { withFileTypes: true })) {

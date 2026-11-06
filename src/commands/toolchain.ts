@@ -3,22 +3,22 @@
 // own the build/install steps; the LANGUAGE they build with is a
 // system concern: on-deploy installs + verifies it here.
 //
-//   on-deploy toolchain --bun [--check|--dry-run|-y]
-//   on-deploy toolchain --rustup [--check|--dry-run|-y]
+//	on-deploy toolchain --bun [--check|--dry-run|-y]
+//	on-deploy toolchain --rustup [--check|--dry-run|-y]
 //
 // Behavior:
-//   present            -> report the version, done. For rustup a
-//                         present-but-toolchain-less state (no cargo)
+//	present	-> report the version, done. For rustup a
+//	present-but-toolchain-less state (no cargo)
 //                         resolves through `rustup default stable`.
-//   --check            -> verify ONLY: absent/broken = fast failure
+//	--check	-> verify ONLY: absent/broken = fast failure
 //                         with the "toolchain missing" message (for
-//                         contexts that must install nothing).
-//   --dry-run          -> resolve + report what would run, change nothing
-//   otherwise          -> install through the platform: the deploy
+//	contexts that must install nothing).
+//	--dry-run	-> resolve + report what would run, change nothing
+//	otherwise	-> install through the platform: the deploy
 //                         target's <target>.deploy package scripts;
 //                         bun falls back to `npm install --global bun`
-//                         when the platform cannot provide it.
-//                         Re-verify after; still absent = hard failure.
+//	when the platform cannot provide it.
+//	Re-verify after; still absent = hard failure.
 //
 // Exit codes: 0 present/installed, 2 env/precondition (usage / --check
 // miss), 1 operational failure (install ran, toolchain still missing).
@@ -92,7 +92,7 @@ async function platformInstall(
 }
 
 /** rustup present but no usable toolchain -> `rustup default stable`.
- *  Returns 0 ok, 1 failed/skipped. */
+ * Returns 0 ok, 1 failed/skipped. */
 async function rustupPost(
     toolchain: Toolchain, dryRun: boolean, yes: boolean,
 ): Promise<number> {

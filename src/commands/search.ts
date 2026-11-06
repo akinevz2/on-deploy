@@ -3,7 +3,7 @@
 // installs, no state changes. Resolution goes through the platform
 // deploy script contract:
 //
-//   <target>.deploy <binary>  ->  the package name (stdout, line 1)
+//	<target>.deploy <binary>	->	the package name (stdout, line 1)
 //
 // (ubuntu.deploy resolves via the apt file lists, arch/manjaro via
 // pacman -Fs — the repo search itself is platform-specific and lives

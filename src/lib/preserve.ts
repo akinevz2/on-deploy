@@ -5,21 +5,21 @@
 // Two flows (the command's --adopt flag picks the second):
 //
 //   DEFAULT (archive-first, "dots wins"):
-//     1. scan: $HOME/<rel> exists, is NOT dots-owned, is not a directory
-//     2. copy every conflict into the store (all-or-nothing: NOTHING is
-//        removed until every copy succeeded)
-//     3. remove the conflict files from $HOME
-//     4. stow -R (no --adopt; the conflicts are gone)
+//	1. scan: $HOME/<rel> exists, is NOT dots-owned, is not a directory
+//	2. copy every conflict into the store (all-or-nothing: NOTHING is
+//	removed until every copy succeeded)
+//	3. remove the conflict files from $HOME
+//	4. stow -R (no --adopt; the conflicts are gone)
 //     5. deployed = the dots version; the user's bytes sit in the store
-//        until the user asks for --restore
+//	until the user asks for --restore
 //
 //   --adopt (adopt-flow, "mine wins" — absorb live configs into the repo):
-//     1. git-clean is BLOCKING (clean HEAD is the only restore point)
-//     2. stow -R --adopt (moves $HOME contents into the package tree,
+//	1. git-clean is BLOCKING (clean HEAD is the only restore point)
+//	2. stow -R --adopt (moves $HOME contents into the package tree,
 //        overwriting the distributed files; deployed = the user's bytes)
-//     3. snapshot the adopted (user) content into the store as insurance
-//        decoupled from the worktree diff
-//     4. user reviews via git diff; keep (suggested git add/commit, never
+//	3. snapshot the adopted (user) content into the store as insurance
+//	decoupled from the worktree diff
+//	4. user reviews via git diff; keep (suggested git add/commit, never
 //        auto-committed) or revert via `git checkout HEAD -- <pkg>`
 //
 // The store lives at ~/.local/state/doftiles/preserve/<pkg>/ — XDG state,
@@ -60,7 +60,7 @@ export interface ScanResult {
     /** copyable conflicts (files and live symlinks) */
     conflicts: Conflict[];
     /** directory-type mismatches: stow cannot resolve these, not even
-     *  with --adopt — the package is aborted before any write */
+     * with --adopt — the package is aborted before any write */
     hard: Conflict[];
 }
 
@@ -132,8 +132,8 @@ function git(args: string[], cwd: string): { code: number; out: string } {
 }
 
 /** tracked modifications only — true when the package tree is clean at
- *  HEAD (the blocking precondition for --adopt). Untracked files do NOT
- *  fail this check (--adopt never touches them). */
+ * HEAD (the blocking precondition for --adopt). Untracked files do NOT
+ * fail this check (--adopt never touches them). */
 export function gitClean(dots: string, pkg: string): boolean {
     return git(["diff", "--quiet", "HEAD", "--", pkg], dots).code === 0;
 }
@@ -157,8 +157,8 @@ function manifest(store: string, data: Record<string, unknown>): void {
 }
 
 /** Copy every conflict into the store (all-or-nothing: throws BEFORE the
- *  caller removes anything). Dangling symlinks are manifest-only.
- *  Returns the rows that were copied. */
+ * caller removes anything). Dangling symlinks are manifest-only.
+ * Returns the rows that were copied. */
 export function copyToStore(store: string, conflicts: Conflict[]): Conflict[] {
     for (const c of conflicts) {
         if (c.kind === "symlink-dangling") continue;
@@ -170,8 +170,8 @@ export function copyToStore(store: string, conflicts: Conflict[]): Conflict[] {
 }
 
 /** Remove the conflict files from $HOME (called only after a successful
- *  copyToStore). Dangling symlinks are removed too (their target is
- *  recorded in the manifest). */
+ * copyToStore). Dangling symlinks are removed too (their target is
+ * recorded in the manifest). */
 export function removeConflicts(conflicts: Conflict[]): void {
     for (const c of conflicts) rmSync(c.homePath, { force: true });
 }
@@ -195,9 +195,9 @@ export function restoreFromStore(dots: string, pkg: string, store: string): stri
 }
 
 /** --adopt: snapshot the adopted (user) content — now in the package
- *  tree — into the store as insurance. Uses the caller-supplied rel list
- *  (the conflicts found by the scan, which is also the adopt set).
- *  Manifest-only for dangling entries (nothing to copy). */
+ * tree — into the store as insurance. Uses the caller-supplied rel list
+ * (the conflicts found by the scan, which is also the adopt set).
+ * Manifest-only for dangling entries (nothing to copy). */
 export function snapshotAdopted(store: string, pkgDir: string, conflicts: Conflict[]): Conflict[] {
     for (const c of conflicts) {
         if (c.kind === "symlink-dangling") continue;
@@ -234,7 +234,7 @@ export function writePreserveManifest(
 // ---------------------------------------------------------------------------
 
 /** stow -R [-–adopt] -t $HOME <pkg> (cwd ~/dots); records the remembered
- *  set exactly like stowPkg. Returns the raw output lines. */
+ * set exactly like stowPkg. Returns the raw output lines. */
 export function stowWithAdopt(pkg: string, adopt: boolean, home: string, dots: string): { ok: boolean; lines: string[] } {
     const args = ["-R", ...(adopt ? ["--adopt"] : []), "-t", home, pkg];
     const p = Bun.spawnSync(["stow", ...args], {
@@ -281,9 +281,9 @@ export interface PreserveOptions {
     /** override store root (default: ~/.local/state/doftiles/preserve) */
     store?: string;
     /** per-file decisions from the interactive resolver (mixed mode):
-     *  archive+remove the dots-wins files (default semantics), copy the
-     *  mine-wins bytes into the package tree (per-file adopt), then
-     *  stow -R once. Supersessions adopt/keep/restore prompts. */
+     * archive+remove the dots-wins files (default semantics), copy the
+     * mine-wins bytes into the package tree (per-file adopt), then
+     * stow -R once. Supersessions adopt/keep/restore prompts. */
     dotsWins?: Conflict[];
     mineWins?: Conflict[];
 }

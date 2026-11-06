@@ -2,27 +2,27 @@
 // "Bootstrapping dots" means deploying on-deploy to the system (the dots
 // Makefile's bootstrap); deploying the submodules means THIS command.
 //
-//   on-deploy depends                 sync the submodule checkouts
-//   on-deploy depends --build         sync + build (no install)
-//   on-deploy depends --install       sync + build + install
+//	on-deploy depends	sync the submodule checkouts
+//	on-deploy depends --build	sync + build (no install)
+//	on-deploy depends --install	sync + build + install
 //
 // Steps:
 //   1. SYNC — `git submodule sync` + `git submodule update --init
 //      --recursive` inside ~/dots (PINNED doctrine, 2026-11: the
-//      nested asset submodules — bat themes/syntaxes and co. — are
-//      updated by UPSTREAM, not chased per machine; the plain update
-//      uses the RECORDED pins, so remotes never re-pull sub-submodule
+//	nested asset submodules — bat themes/syntaxes and co. — are
+//	updated by UPSTREAM, not chased per machine; the plain update
+//	uses the RECORDED pins, so remotes never re-pull sub-submodule
 //      churn; `git submodule update --remote` bumps a checkout BY
-//      HAND when a pinned tree is to be advanced). --no-sync skips the
-//      git phase (re-running builds without touching the checkouts).
-//   2. DRIVE — every stow package that ships the per-package Makefile
-//      dots/<pkg>/.local/state/depends/<pkg>.Makefile gets the rule the
+//	HAND when a pinned tree is to be advanced). --no-sync skips the
+//	git phase (re-running builds without touching the checkouts).
+//	2. DRIVE — every stow package that ships the per-package Makefile
+//	dots/<pkg>/.local/state/depends/<pkg>.Makefile gets the rule the
 //      depth asks for: `build` (--build) or `install` (--install). ALL
-//      the build/install/link logic lives in those Makefiles —
-//      on-deploy hardcodes nothing per package (--force passes FORCE=1;
+//	the build/install/link logic lives in those Makefiles —
+//	on-deploy hardcodes nothing per package (--force passes FORCE=1;
 //      the Makefiles' ensure/rebuild semantics are theirs to define).
-//   3. bare (no depth) — the discovery report: which packages host which
-//      submodules and have a Makefile ready.
+//	3. bare (no depth) — the discovery report: which packages host which
+//	submodules and have a Makefile ready.
 //
 // Exit codes: 2 env/precondition, 1 any package rule failed, 0 ok.
 

@@ -1,6 +1,6 @@
 // src/lib/deployScript.ts — the deploy target deploy-script contract:
-//   <target>.deploy <binary>          -> prints the providing package
-//   <target>.deploy install <binary>  -> prints the install COMMAND
+//	<target>.deploy <binary>	-> prints the providing package
+//	<target>.deploy install <binary>	-> prints the install COMMAND
 // (stdout, trimmed; the CALLER executes the command).
 
 import { spawnSync } from "node:child_process";

@@ -67,7 +67,7 @@ function attach(): void {
 }
 
 /** resolve with the next line, or null at EOF (terminal ctrl-d /
- *  closed stdin). The null branch must abort, never assume. */
+ * closed stdin). The null branch must abort, never assume. */
 export function readLine(): Promise<string | null> {
     if (!attached) {
         attached = true;
@@ -90,8 +90,8 @@ export async function confirm(prompt: string): Promise<"yes" | "no" | "abort"> {
 }
 
 /** non-null line read: retries past the EOF case with a message (for
- *  prompts where skipping is NOT an option). Loop-safe on EOF? No —
- *  returns null when stdin is over; callers exit. */
+ * prompts where skipping is NOT an option). Loop-safe on EOF? No —
+ * returns null when stdin is over; callers exit. */
 export async function readLineRequired(prompt: string): Promise<string | null> {
     process.stdout.write(prompt);
     return await readLine();

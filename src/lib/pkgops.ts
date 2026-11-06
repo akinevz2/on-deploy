@@ -26,11 +26,11 @@ export function stowPackages(): string[] {
 
 /**
  * the per-package dependency Makefile, at the 2026-11 depends scheme:
- *   dots/<pkg>/.local/state/depends/<pkg>.Makefile   (the stow package
+ *	dots/<pkg>/.local/state/depends/<pkg>.Makefile	(the stow package
  *     hosts its submodules' build/link/install recipes; run with -f)
  * or, as a fallback for packages NOT yet migrated (e.g. polybar's
  * bar-control Makefile), the legacy hook directory:
- *   dots/<pkg>/.local/share/<pkg>/Makefile
+ *	dots/<pkg>/.local/share/<pkg>/Makefile
  * Returns { dir, file } where dir is the `make -C` cwd and file the
  * repo-relative makefile to run.
  */
@@ -53,7 +53,7 @@ export function hasMakefile(pkg: string): boolean {
 
 /** the depends-scheme Makefile of a package (the per-submodule
  *  sync/build/link/install recipes on-deploy `depends` drives) —
- *  dots/<pkg>/.local/state/depends/<pkg>.Makefile, or null */
+ * dots/<pkg>/.local/state/depends/<pkg>.Makefile, or null */
 export function depsMakefile(pkg: string): string | null {
     const file = join(DOTS, pkg, ".local", "state", "depends", `${pkg}.Makefile`);
     return existsSync(file) ? file : null;
@@ -70,10 +70,10 @@ export function packagesWithDepsMakefiles(): string[] {
 }
 
 /** submodule paths mapped to the stow package that owns each
- *  (duplicated across packages). CONFIGURED SOURCE: the system.required
+ * (duplicated across packages). CONFIGURED SOURCE: the system.required
  *  manifest — each non-comment line is `<pkg> <path> <path>...`.
- *  FALLBACK: .gitmodules walk (grouped by first path segment) when the
- *  manifest is missing or empty — keeps bare checkouts usable. */
+ * FALLBACK: .gitmodules walk (grouped by first path segment) when the
+ * manifest is missing or empty — keeps bare checkouts usable. */
 export function submodulesByPackage(): Record<string, string[]> {
     const manifest = join(DOTS, "system.required");
     if (existsSync(manifest)) {
@@ -107,7 +107,7 @@ export interface PkgResult {
 
 /** the legacy regular-file swap: a REGULAR file at ~/.local/bin/<name>
  *  is removed so the package's stow link can land — every adapter used
- *  to carry this per package; it is the COMMON redeploy step now */
+ * to carry this per package; it is the COMMON redeploy step now */
 export function swapArtifact(name: string): PkgResult {
     const p = join(process.env.HOME!, ".local", "bin", name);
     if (existsSync(p)) {
@@ -164,8 +164,8 @@ export function pkgUnits(pkg: string): string[] {
 }
 
 /** enable/disable the package's stowed user units (generic fallback
- *  for packages WITHOUT a Makefile; Makefile packages use their own
- *  enable/disable rules instead) */
+ * for packages WITHOUT a Makefile; Makefile packages use their own
+ * enable/disable rules instead) */
 export function unitsOp(pkg: string, op: "enable" | "disable"): PkgResult {
     const lines: string[] = [];
     let ok = true;
@@ -181,8 +181,8 @@ export function unitsOp(pkg: string, op: "enable" | "disable"): PkgResult {
 }
 
 /** run a Makefile rule of one package, output CAPTURED. The Makefile
- *  is resolved by pkgMakefile (depends scheme -f, else the legacy
- *  hook directory). */
+ * is resolved by pkgMakefile (depends scheme -f, else the legacy
+ * hook directory). */
 export function runRule(pkg: string, rule: string): PkgResult {
     const mf = pkgMakefile(pkg);
     if (!mf) return { pkg, ok: false, lines: ["no Makefile"] };
@@ -221,8 +221,8 @@ export function spinner(label: string): (meta: string) => void {
 }
 
 /** ONE package Makefile run, async so the spinner can tick the
- *  blocking step; the raw spawnSync twin (runRule/runDeps twin) rides
- *  the same text capture. */
+ * blocking step; the raw spawnSync twin (runRule/runDeps twin) rides
+ * the same text capture. */
 export async function runMakeSpun(
     dir: string, file: string, makeVars: string[], rule: string,
     label: string,
@@ -247,7 +247,7 @@ export async function runMakeSpun(
 }
 
 /** packages that ship a dependency Makefile (the depends scheme
- *  preferred, the legacy hook directory as fallback) */
+ * preferred, the legacy hook directory as fallback) */
 export function packagesWithMakefiles(): string[] {
     const out: string[] = [];
     for (const e of readdirSync(DOTS, { withFileTypes: true })) {

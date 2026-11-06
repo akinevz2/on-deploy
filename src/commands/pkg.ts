@@ -2,12 +2,12 @@
 // the names the CALLER passes. Zero hardcoded package names; the
 // deploy target resolution (apt | pacman) is the only intelligence here.
 //
-//   on-deploy pkg installed <name>...   exit 0 when ALL are installed
-//   on-deploy pkg search <name>...      resolve the providing package
-//                                       (binary names go through the
-//                                       <target>.deploy protocol)
-//   on-deploy pkg install <name>...     deploy target package manager
-//   on-deploy pkg remove <name>...      deploy target package manager
+//	on-deploy pkg installed <name>...	exit 0 when ALL are installed
+//	on-deploy pkg search <name>...	resolve the providing package
+//	(binary names go through the
+//	<target>.deploy protocol)
+//	on-deploy pkg install <name>...	deploy target package manager
+//	on-deploy pkg remove <name>...	deploy target package manager
 //
 // The package Makefiles defer here for the deploy target work; on-deploy
 // never associates behavior to a specific name.

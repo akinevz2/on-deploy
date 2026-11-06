@@ -2,11 +2,11 @@
 // DELEGATES here: enable/start/stop/restart over the units listed in
 // services.required (repo-level manifest, whitespace-split, start order).
 //
-//   on-deploy services check      daemon-reload + enable --now each unit
-//   on-deploy services start      start each unit (reset-failed first)
-//   on-deploy services stop       drop .wants links + cancel jobs + stop
-//   on-deploy services restart    restart each unit
-//   on-deploy services status     is-active per unit
+//	on-deploy services check	daemon-reload + enable --now each unit
+//	on-deploy services start	start each unit (reset-failed first)
+//	on-deploy services stop	drop .wants links + cancel jobs + stop
+//	on-deploy services restart	restart each unit
+//	on-deploy services status	is-active per unit
 //
 // Non-interactive runs REQUIRE --yes (start/stop/restart confirm on a
 // tty; nothing hangs on stdin). NO package knowledge: the unit list

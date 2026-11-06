@@ -35,11 +35,11 @@ export interface Step {
 }
 
 /** is the deploy target package `<pkg>` installed? (dpkg-query |
- *  pacman -Qi — resolved by the target family the CALLER passes; no
- *  package names live here)
- *  The PKG MANAGER + OPERATION arguments are TYPED OBJECTS (no inline
- *  or-unions in signatures — extending the support matrix happens in
- *  the catalog/file below). */
+ * pacman -Qi — resolved by the target family the CALLER passes; no
+ * package names live here)
+ * The PKG MANAGER + OPERATION arguments are TYPED OBJECTS (no inline
+ * or-unions in signatures — extending the support matrix happens in
+ * the catalog/file below). */
 export const PKG_MANAGER_ID = {
     apt: "apt",
     pacman: "pacman",
@@ -55,7 +55,7 @@ export type PkgOpKind = keyof typeof PKG_OP;
 
 /** deploy target families (deployScript/targets implement them as the
  *  `<target>.deploy` protocol; the family decides which system
- *  transport is usable) */
+ * transport is usable) */
 export const TARGET_FAMILY = {
     debian: "debian",
     ubuntu: "ubuntu",
@@ -78,8 +78,8 @@ export interface TargetPkgRequest {
 }
 
 /** ── the static dispatch maps (per package manager; per family) ──────
- *  adding a platform = adding a row HERE + provisioning a systemSpec
- *  in pkgmanagers; no ternary edits anywhere */
+ * adding a platform = adding a row HERE + provisioning a systemSpec
+ * in pkgmanagers; no ternary edits anywhere */
 const TARGET_PKG_ARGV: Record<PkgManagerId, Record<PkgOpKind, string[]>> = {
     [PKG_MANAGER_ID.apt]: {
         [PKG_OP.install]: ["install", "-y"],
@@ -108,7 +108,7 @@ const FAMILY_PKG_MGR: Record<TargetFamily, PkgManagerId> = {
 };
 
 /** the platform package manager for a deploy target family (null when
- *  the family is unknown/unsupported) */
+ * the family is unknown/unsupported) */
 export function familyPkgManager(family: string | null | undefined): PkgManagerId | null {
     if (!family) return null;
     return family in FAMILY_PKG_MGR ? FAMILY_PKG_MGR[family as TargetFamily] : null;
@@ -119,7 +119,7 @@ export function targetPkgInstalled(req: TargetPkgInstalledRequest): boolean {
 }
 
 /** the deploy target package-manager install/remove invocation for the
- *  NAMES the caller passes */
+ * NAMES the caller passes */
 export async function targetPkg(req: TargetPkgRequest): Promise<number> {
     if (req.names.length === 0) return 0;
     const argv = [...TARGET_PKG_ARGV[req.pkgMgr][req.op], ...req.names];
@@ -127,8 +127,8 @@ export async function targetPkg(req: TargetPkgRequest): Promise<number> {
 }
 
 /** verifyWslSession — the WSL session verify: the external X server
- *  reachable on the DISPLAY the units use. Unit enablement belongs to
- *  the dots services flow (services.required / package Makefiles). */
+ * reachable on the DISPLAY the units use. Unit enablement belongs to
+ * the dots services flow (services.required / package Makefiles). */
 export function verifyWslSession(): Step {
     const xok = sh("sh", ["-c", 'xset -display "$1" q >/dev/null 2>&1', "-", detectDisplay().display]);
     const ok = xok.code === 0;
@@ -140,21 +140,21 @@ export function verifyWslSession(): Step {
 }
 
 /** detectDisplay — probe a REACHABLE X display and export it into the
- *  process env for every child on-deploy spawns (hooks, package
- *  Makefiles, service units depend on it).
+ * process env for every child on-deploy spawns (hooks, package
+ * Makefiles, service units depend on it).
  *
- *  WHY: the WSL2 stack has seen more than one display number
- *  (localhost:0.0 exclusively, then :1.0 from VcXsrv multiwindow
- *  re-parenting) — an inherited DEAD $DISPLAY makes X clients HANG
+ * WHY: the WSL2 stack has seen more than one display number
+ * (localhost:0.0 exclusively, then :1.0 from VcXsrv multiwindow
+ * re-parenting) — an inherited DEAD $DISPLAY makes X clients HANG
  *  instead of failing fast (seen with reload_theme "Cannot open
  *  display"/hung xset under `on-deploy packages install`). A stale
- *  inherited value is re-tested and discarded like any other probe.
+ * inherited value is re-tested and discarded like any other probe.
  *
- *  Order: $DISPLAY if it answers, then localhost:0.0, localhost:1.0,
- *  :0, :1; each probe is bounded at 2s. Success rewrites
- *  process.env.DISPLAY; failure leaves the env untouched and reports
- *  ok:false — callers treat X-touching steps as unavailable, not
- *  fatally (headless targets must keep deploying). */
+ * Order: $DISPLAY if it answers, then localhost:0.0, localhost:1.0,
+ * :0, :1; each probe is bounded at 2s. Success rewrites
+ * process.env.DISPLAY; failure leaves the env untouched and reports
+ * ok:false — callers treat X-touching steps as unavailable, not
+ * fatally (headless targets must keep deploying). */
 export function detectDisplay(): { display: string; ok: boolean; probed: string[] } {
     const xset = sh("sh", ["-c", "command -v xset"]).out;
     if (!xset) {
@@ -179,12 +179,12 @@ export function detectDisplay(): { display: string; ok: boolean; probed: string[
 }
 
 /** ensureVcxsrv — the WSL stretch: the Windows-side X server. Checks
- *  the common VcXsrv install paths on the /mnt/c Windows partition;
- *  when absent, fetches the latest installer from the SourceForge
- *  release API and runs it silently (InnoSetup /VERYSILENT) through
- *  WSL interop. Gated: dry-run reports only; the explicit run needs
+ * the common VcXsrv install paths on the /mnt/c Windows partition;
+ * when absent, fetches the latest installer from the SourceForge
+ * release API and runs it silently (InnoSetup /VERYSILENT) through
+ * WSL interop. Gated: dry-run reports only; the explicit run needs
  *  the caller's confirm/--yes. deploy target code (the external X server
- *  of the wsl-systemd deployment model), not package management. */
+ * of the wsl-systemd deployment model), not package management. */
 export async function ensureVcxsrv(
     yes: boolean, dryRun: boolean,
 ): Promise<Step> {

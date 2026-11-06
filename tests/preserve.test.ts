@@ -19,7 +19,7 @@ const USER_BYTES = "user pre-existing config\n";
 const DOTS_BYTES = "dots distributed config\n";
 
 /** Build a fake dots checkout (one package `dummy` with .config/app.cfg)
- *  and a fake $HOME containing a conflicting user file at the same rel. */
+ * and a fake $HOME containing a conflicting user file at the same rel. */
 function fixture(userBytes: string = USER_BYTES) {
     const root = mkdtempSync(join(tmpdir(), "preserve-test-"));
     const dots = join(root, "dots");

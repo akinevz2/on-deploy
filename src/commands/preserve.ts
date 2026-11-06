@@ -2,29 +2,29 @@
 // packages before (re)stowing, keeping the user's pre-existing bytes
 // recoverable.
 //
-//   on-deploy preserve <pkg> [pkg2 ...]
+//	on-deploy preserve <pkg> [pkg2 ...]
 //   on-deploy preserve --only "pkg1 pkg2"
-//       non-interactive (falls back automatically when the flags pick
-//         a branch), or when no conflicts exist: the ARCHIVE-FIRST
+//	non-interactive (falls back automatically when the flags pick
+//	a branch), or when no conflicts exist: the ARCHIVE-FIRST
 //         flow ("dots wins") — conflicts are copied into
-//         ~/.local/state/doftiles/preserve/<pkg>/, removed from $HOME,
+//	~/.local/state/doftiles/preserve/<pkg>/, removed from $HOME,
 //         then `stow -R` deploys the dots version. TTY interactive
-//         per-package prompts offer restore-or-keep (default keep);
-//         non-TTY defaults to keep without blocking.
-//   on-deploy preserve            (TTY, no branch flags)
-//       the CONFLICT RESOLVER UI: a bunli-native (opentui) checklist of
-//         packages with conflicts → per package, each conflicting file
-//         gets its own decision prompt — view the INLINE diff, open the
-//         full-screen SIDE-BY-SIDE diff viewer (TSX), keep the dots
-//         version, or adopt MY version into the repo. Files the user
-//         adopts land in the package tree (manifest records the
-//         decisions; committing the adoption stays a manual step —
-//         never auto-committed).
-//   on-deploy preserve <pkg> --adopt
+//	per-package prompts offer restore-or-keep (default keep);
+//	non-TTY defaults to keep without blocking.
+//	on-deploy preserve	(TTY, no branch flags)
+//	the CONFLICT RESOLVER UI: a bunli-native (opentui) checklist of
+//	packages with conflicts → per package, each conflicting file
+//	gets its own decision prompt — view the INLINE diff, open the
+//	full-screen SIDE-BY-SIDE diff viewer (TSX), keep the dots
+//	version, or adopt MY version into the repo. Files the user
+//	adopts land in the package tree (manifest records the
+//	decisions; committing the adoption stays a manual step —
+//	never auto-committed).
+//	on-deploy preserve <pkg> --adopt
 //       whole-package adopt-flow ("mine wins"): `stow -R --adopt`
-//         moves $HOME contents into the package tree. A clean worktree
-//         is REQUIRED (clean HEAD = the restore point).
-//   flags: --dry-run --yes/-y --keep --restore --store <dir>
+//	moves $HOME contents into the package tree. A clean worktree
+//	is REQUIRED (clean HEAD = the restore point).
+//	flags: --dry-run --yes/-y --keep --restore --store <dir>
 //
 // The store is XDG state (see lib/preserve.ts for the layout), outside
 // the repo. Nothing here is per-package: all behaviors are keyed off
@@ -52,7 +52,7 @@ function unifiedDiff(repoPath: string, homePath: string): string[] {
 }
 
 /** the per-file diff data for BOTH views, AT ONCE (the TSX viewer
- *  toggles between them without recomputation) */
+ * toggles between them without recomputation) */
 function diffViews(repoPath: string, homePath: string) {
     const cols = Math.max(80, process.stdout.columns ?? 100);
     const page = Math.max(40, Math.floor(cols / 2) - 3);
