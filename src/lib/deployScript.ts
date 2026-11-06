@@ -56,6 +56,19 @@ export async function runInstall(target: string, binary: string): Promise<Instal
     if (code !== 0 || !cmd) {
         return { ok: false, command: "", problem: `${target}.deploy install gave no command for '${binary}'` };
     }
+    // TRANSPARENCY (the frozen-prompt bug): print the command BEFORE
+    // running it — the walk used to go silent after the [Y/n] answer
+    // (nothing until apt's first output). And restore COOKED mode
+    // explicitly: the TUI wizard should have stepped the renderer down
+    // already, but sudo prompts read the tty; in even a leftover raw
+    // mode the [sudo] password prompt has NO ECHO and the terminal
+    // looks hung while the keystrokes go in blind.
+    console.log(`         running: ${cmd}`);
+    if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
+        try {
+            process.stdin.setRawMode(false);
+        } catch { /* not in raw mode */ }
+    }
     const run = Bun.spawn(["sh", "-c", cmd], { stdout: "inherit", stderr: "inherit", stdin: "inherit" });
     const exit = await run.exited;
     if (exit !== 0) {

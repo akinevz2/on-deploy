@@ -127,6 +127,8 @@ const systemSpec = (id: PkgManagerId, families: TargetFamily[]): PkgManagerSpec 
     installed: (name) => targetPkgInstalled({ pkgMgr: id, name }),
     run: async (req) => await targetPkg({ ...req, pkgMgr: id }),
     resolve: async (target, name) => {
+        // a null target has no deploy-script identity: unresolved
+        if (target === null) return null;
         const res = await resolvePackage(target, name);
         return res.ok && res.pkg ? res.pkg : null;
     },
