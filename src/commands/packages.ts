@@ -18,9 +18,8 @@
 import { defineCommand } from "@bunli/core";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { checkDotsEnv, DOTS_DIR } from "../lib/dots";
+import { checkDotsEnv, DOTS_DIR, readWmPackages } from "../lib/dots";
 import { printResults, runRule, type PkgResult } from "../lib/pkgops";
-import { readWmPackages } from "../lib/dots";
 import { releaseTui, tuiChecklist, tuiSelect } from "../lib/tui";
 
 
@@ -41,14 +40,14 @@ export function packagesWithMakefiles(dots: string): string[] {
             out.push(name.name);
         }
     }
-    return out.sort();
+    return out.sort((a, b) => a.localeCompare(b));
 }
 
 
 export default defineCommand({
     name: "packages",
     description:
-        "Group operations on the stow packages' dependency Makefiles (install/start/stop/uninstall/status/disable/enable); bare = TUI",
+        "Perform stow package operations on supported dots packages",
     handler: async ({ positional }) => {
         const env = checkDotsEnv();
         if (!env.ok) {

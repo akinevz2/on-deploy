@@ -27,13 +27,15 @@ type Op = "installed" | "search" | "install" | "remove";
 export default defineCommand({
     name: "pkg",
     description:
-        "Generic package operations on the given names (installed|search|install|remove) via the deploy target package manager",
+        "Perform package manager operations on supported systems",
     options: {
-        force: option(z.boolean().optional(), { argumentKind: "flag" as const,
+        force: option(z.boolean().optional(), {
+            argumentKind: "flag" as const,
             description: "no confirmations (non-interactive)",
             short: "y",
         }),
-        "dry-run": option(z.boolean().optional(), { argumentKind: "flag" as const,
+        "dry-run": option(z.boolean().optional(), {
+            argumentKind: "flag" as const,
             description: "print what would run",
         }),
     },
@@ -58,36 +60,36 @@ export default defineCommand({
         for (const name of names) {
             if (op === "installed") {
                 const on = targetPkgInstalled({ pkgMgr, name });
-                console.log(`  ${name.padEnd(20)} ${on ? "installed" : "MISSING"}`);
+                console.log(`	${name}	${on ? "installed" : "MISSING"}`);
                 if (!on) failed += 1;
                 continue;
             }
             if (op === "search") {
                 const res = await resolvePackage(target, name);
-                if (res.ok) console.log(`  ${name.padEnd(20)} -> ${res.pkg}`);
+                if (res.ok) console.log(`	${name}	-> ${res.pkg}`);
                 else {
-                    console.log(`  ${name.padEnd(20)} UNRESOLVED`);
+                    console.log(`	${name}	UNRESOLVED`);
                     failed += 1;
                 }
                 continue;
             }
             // install | remove: skip already-satisfied state on install
             if (PKG_OP.install === op && targetPkgInstalled({ pkgMgr, name })) {
-                console.log(`  ${name.padEnd(20)} already installed`);
+                console.log(`	${name}	already installed`);
                 continue;
             }
-            console.log(`  ${name.padEnd(20)} ${op}`);
+            console.log(`	${name}	${op}`);
             const code = await targetPkg({
                 pkgMgr, op: op as PkgOpKind, names: [name], dry,
             });
             if (code !== 0) {
-                console.error(`  ${name.padEnd(20)} FAILED (exit ${code})`);
+                console.error(`	${name}	FAILED (exit ${code})`);
                 failed += 1;
                 continue;
             }
             if (op === "install" && !dry) {
                 const on = targetPkgInstalled({ pkgMgr, name });
-                console.log(`  ${name.padEnd(20)} ${on ? "installed" : "STILL MISSING"}`);
+                console.log(`	${name}	${on ? "installed" : "STILL MISSING"}`);
                 if (!on) failed += 1;
             }
         }

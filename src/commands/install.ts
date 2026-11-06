@@ -36,21 +36,21 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
     const wanted = only?.length ? requires.binaries.filter((b) => only.includes(b)) : requires.binaries;
     for (const binary of wanted) {
         if (installed(binary)) {
-            console.log(`  ${binary.padEnd(20)} already installed`);
+            console.log(`	${binary}	already installed`);
             continue;
         }
         const res = await resolvePackage(target, binary);
         if (!res.ok) {
-            console.error(`  ${binary.padEnd(20)} UNRESOLVED`);
-            console.error(`  ${" ".repeat(20)} ${res.problem ?? ""}`);
+            console.error(`	${binary}	UNRESOLVED`);
+            console.error(`	${" ".repeat(20)} ${res.problem ?? ""}`);
             failed += 1;
             continue;
         }
-        console.log(`  ${binary.padEnd(20)} MISSING (package: ${res.pkg})`);
+        console.log(`	${binary}	MISSING (package: ${res.pkg})`);
         if (dryRun) continue;
 
         if (!yes) {
-            const ok = await confirm(`         install ${res.pkg}? [Y/n] `);
+            const ok = await confirm(`	install ${res.pkg}? [Y/n] `);
             if (ok === "abort") {
                 console.error(`install: stopped, EOF (ctrl-d), ${binary} unresolved`);
                 process.exit(130);
@@ -69,7 +69,7 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
         }
         // re-verify: the install command ran; the binary must exist now
         if (installed(binary)) {
-            console.log(`         installed: ${inst.command}`);
+            console.log(`	installed: ${inst.command}`);
         } else {
             console.error(`install: FAILED, ${binary} still absent`);
             console.error(`install: ran, ${inst.command}`);

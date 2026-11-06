@@ -151,7 +151,7 @@ const REGISTRY_ARGV: Record<RegistryId, Record<PkgOpKind, string[]>> = {
 function registryRun(cmd: RegistryId, req: TransportRequest): Promise<number> {
     const argv = REGISTRY_ARGV[cmd][req.op];
     if (req.dry) {
-        console.log(`    [dry-run] ${argv.join(" ")} ${req.names.join(" ")}`);
+        console.log(`	[dry-run] ${argv.join(" ")} ${req.names.join(" ")}`);
         return Promise.resolve(0);
     }
     const p = Bun.spawnSync([...argv, ...req.names], { stdout: "inherit", stderr: "inherit" });

@@ -43,15 +43,15 @@ export default defineCommand({
         for (const binary of wanted) {
             const installedNow = !missing([binary]).length;
             if (installedNow && !flags.all) {
-                console.log(`  ${binary.padEnd(20)} installed (--all to resolve anyway)`);
+                console.log(`	${binary}	installed (--all to resolve anyway)`);
                 continue;
             }
             const res = await resolvePackage(requires.target, binary);
             if (res.ok) {
-                console.log(`  ${binary.padEnd(20)} -> ${res.pkg}`);
+                console.log(`	${binary}	-> ${res.pkg}`);
             } else {
-                console.log(`  ${binary.padEnd(20)} UNRESOLVED`);
-                console.log(`  ${" ".repeat(20)} ${res.problem ?? ""}`);
+                console.log(`	${binary}	UNRESOLVED`);
+                console.log(`	${" ".repeat(20)} ${res.problem ?? ""}`);
                 failed += 1;
             }
         }

@@ -114,7 +114,9 @@ async function resolveInteractive(pkgs: string[], opts: PreserveOptions): Promis
         { preselect: groups.map((g) => g.pkg) },
     );
     if (chosen === null) {
-        console.log("preserve: cancelled — nothing staged; deploying the clean packages only");
+        console.log("preserve: cancelled");
+        console.log("preserve: nothing staged");
+        console.log("preserve: deploying the clean packages only");
         return worst;
     }
 
@@ -123,7 +125,7 @@ async function resolveInteractive(pkgs: string[], opts: PreserveOptions): Promis
         const group = groups.find((g) => g.pkg === pkg)!;
         if (group.hard.length > 0) {
             console.log(`preserve ${pkg}: hard conflicts skipped (resolve by hand):`);
-            for (const c of group.hard) console.log(`  ${c.homePath} (directory where the package needs a file)`);
+            for (const c of group.hard) console.log(`	${c.homePath} (directory where the package needs a file)`);
             worst = Math.max(worst, 1);
         }
         const resolvable = group.conflicts;
@@ -164,7 +166,9 @@ async function resolveInteractive(pkgs: string[], opts: PreserveOptions): Promis
             }
         }
         if (dotsWins.length === 0 && mineWins.length === 0) {
-            console.log(`preserve ${pkg}: no decisions — left untouched`);
+            console.log(`preserve ${pkg}:`);
+        console.log(`preserve ${pkg}: no decisions`);
+        console.log(`preserve ${pkg}: left untouched`);
             continue;
         }
         const r = await preservePackage(pkg, { ...opts, yes: true, keep: true, dotsWins, mineWins });
@@ -272,7 +276,8 @@ export default defineCommand({
                         `preserve ${pkg}: restore your stored files over the deployed version? [y/N] `,
                     );
                     if (ok === "abort") {
-                        console.error("preserve: EOF (ctrl-d) — stopped");
+                        console.error("preserve: EOF (ctrl-d)");
+        console.error("preserve: stopped");
                         process.exit(130);
                     }
                     return ok === "yes";

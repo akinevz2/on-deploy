@@ -200,7 +200,7 @@ export function runRule(pkg: string, rule: string): PkgResult {
 export function printResults(results: PkgResult[]): void {
     for (const r of results) {
         console.log(`== ${r.pkg}${r.ok ? "" : " (FAILED)"}`);
-        for (const l of r.lines) console.log(`  ${l}`);
+        for (const l of r.lines) console.log(`	${l}`);
     }
 }
 

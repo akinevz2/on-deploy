@@ -178,7 +178,8 @@ async function ensure(
 
 	// e) bun fallback: npm (the node toolchain's own manager) carries bun
 	if (key === "bun" && installed("npm")) {
-		console.log("\tbun\tthe platform resolution failed — falling back to npm");
+		console.log("\tbun\tthe platform resolution failed");
+		console.log("\tbun\tfalling back to npm");
 		if (!dryRun) {
 			const run = Bun.spawn(["npm", "install", "--global", "bun"], {
 				stdout: "inherit", stderr: "inherit", stdin: "inherit",

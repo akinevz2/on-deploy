@@ -86,7 +86,7 @@ export function runServicesAction(action: ServicesAction, units: string[]): numb
     console.log(`services: ${action} submitted; current state:`);
     for (const unit of units) {
         const st = shOut(`systemctl --user is-active ${unit} 2>/dev/null`).out || "unknown";
-        console.log(`  ${unit.padEnd(28)} ${st}`);
+        console.log(`	${unit.padEnd(28)} ${st}`);
     }
     return failed;
 }

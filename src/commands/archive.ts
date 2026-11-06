@@ -39,7 +39,7 @@ export default defineCommand({
             return;
         }
         console.log(`archive ${pkg}: ${rows.length} item(s) ${flags["dry-run"] ? "would be collected" : "collected"}:`);
-        for (const r of rows) console.log(`  ${r.rel} (${r.kind})`);
+        for (const r of rows) console.log(`	${r.rel} (${r.kind})`);
         if (!flags["dry-run"]) {
             console.log(`archive ${pkg}: restore: on-deploy unarchive ${pkg}`);
         }

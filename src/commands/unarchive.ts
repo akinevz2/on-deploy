@@ -38,6 +38,6 @@ export default defineCommand({
             return;
         }
         console.log(`unarchive ${pkg}: ${rels.length} item(s) ${flags["dry-run"] ? "would be restored" : "restored"}:`);
-        for (const rel of rels) console.log(`  ${rel}`);
+        for (const rel of rels) console.log(`	${rel}`);
     },
 });

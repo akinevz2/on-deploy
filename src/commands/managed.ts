@@ -93,10 +93,10 @@ async function runPkg(desc: PkgDescriptor, family: string | null, args: MethodAr
     }
     const lines: string[] = [];
     if (!args.force && t.spec.installed(t.installable)) {
-        lines.push(`  ${desc.pkg.padEnd(11)} installed already (${t.id}: ${t.installable})`);
+        lines.push(`	${desc.pkg} installed already (${t.id}: ${t.installable})`);
         return { ok: true, lines };
     }
-    lines.push(`  ${desc.pkg.padEnd(11)} install (${t.id}${t.installable !== desc.installName ? ` via ${t.installable}` : ""})`);
+    lines.push(`	${desc.pkg} install (${t.id}${t.installable !== desc.installName ? ` via ${t.installable}` : ""})`);
     return { ok: (await t.spec.run({ op: PKG_OP.install, names: [t.installable], dry: args.dry })) === 0, lines };
 }
 
@@ -111,7 +111,7 @@ function resolveMethod(desc: PkgDescriptor, args: MethodArgs): string {
 
 function dryGuard(dry: boolean, what: string): boolean {
     if (!dry) return false;
-    console.log(`  [dry-run] ${what}`);
+    console.log(`	[dry-run] ${what}`);
     return true;
 }
 
@@ -151,7 +151,7 @@ export default defineCommand({
         if (!pkg || !op || extra.length > 0) {
             console.error("managed: usage: on-deploy managed <pkg> <op> [--method M] [--value V] [--force=1] [--dry-run=1]");
             console.error("op: install | uninstall | status | conf-get | conf-set | metadata | <metadata field>");
-            console.error("    or a make target passthrough (toolchain, build, link, install-source, ...)");
+            console.error("	or a make target passthrough (toolchain, build, link, install-source, ...)");
             process.exit(2);
         }
         const { target } = await readRequires();
@@ -196,12 +196,12 @@ export default defineCommand({
         };
 
         if (COMMON_NOOPS.has(op)) {
-            console.log(`  ${desc.pkg.padEnd(11)} nothing to ${op}`);
+            console.log(`	${desc.pkg} nothing to ${op}`);
             return;
         }
 
         if (op === "conf-get") {
-            console.log(`  ${desc.pkg.padEnd(11)} ${desc.key}=${confGet(desc.key)}`);
+            console.log(`	${desc.pkg} ${desc.key}=${confGet(desc.key)}`);
             return;
         }
         if (op === "conf-set") {
@@ -211,7 +211,7 @@ export default defineCommand({
             }
             if (dryGuard(args.dry, `conf-set ${desc.key}=${args.value}`)) return;
             confSet(desc.key, args.value);
-            console.log(`  ${desc.pkg.padEnd(11)} ${desc.key}=${args.value}`);
+            console.log(`	${desc.pkg} ${desc.key}=${args.value}`);
             return;
         }
 
@@ -227,9 +227,9 @@ export default defineCommand({
             }
             const art = desc.artifact ? existsSync(join(process.env.HOME!, "dots", desc.artifact)) : false;
             const subOk = desc.subDir ? existsSync(join(process.env.HOME!, "dots", desc.subDir)) : true;
-            console.log(`  ${desc.pkg.padEnd(11)} ${registryOk ? "installed" : deployedState(desc)}`);
-            console.log(`  ${"".padEnd(11)} artifact=${art ? "linked" : "none"}`);
-            console.log(`  ${"".padEnd(11)} checkout=${subOk ? "present" : "missing"} method=${confGet(desc.key) || "(unset)"}`);
+            console.log(`	${desc.pkg} ${registryOk ? "installed" : deployedState(desc)}`);
+            console.log(`	artifact=${art ? "linked" : "none"}`);
+            console.log(`	checkout=${subOk ? "present" : "missing"} method=${confGet(desc.key) || "(unset)"}`);
             return;
         }
 
@@ -249,7 +249,7 @@ export default defineCommand({
             if (!r.ok) process.exit(1);
             unstowPkg(desc.pkg);
             confSet(desc.key, "none");
-            console.log(`  ${desc.pkg.padEnd(11)} uninstalled`);
+            console.log(`	${desc.pkg} uninstalled`);
             return;
         }
 
@@ -260,7 +260,7 @@ export default defineCommand({
                 console.error(`managed: ${desc.pkg}: unknown method '${resolved}' (methods_supported: ${desc.methods.join(" ")})`);
                 process.exit(2);
             }
-            console.log(`  ${desc.pkg.padEnd(11)} install (method=${resolved})`);
+            console.log(`	${desc.pkg} install (method=${resolved})`);
             if (resolved === "pkg") {
                 const r = await runPkg(desc, family, args);
                 for (const line of r.lines) console.log(line);

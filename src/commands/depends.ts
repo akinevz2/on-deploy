@@ -98,7 +98,7 @@ export default defineCommand({
         // `git submodule update --remote` must be run BY HAND to bump)
         if (!noSync) {
             if (dry) {
-                console.log("  [dry-run] git submodule sync && git submodule update --init --recursive");
+                console.log("	[dry-run] git submodule sync && git submodule update --init --recursive");
             } else {
                 console.log("depends: git submodule sync");
                 if (shInherit(["git", "submodule", "sync"], DOTS_DIR) !== 0) process.exit(1);
@@ -131,7 +131,7 @@ export default defineCommand({
             // 3) discovery report
             console.log(`depends: packages: ${targets.join(" ") || "(none)"}`);
             for (const pkg of targets) {
-                console.log(`  ${pkg.padEnd(12)} <- ${(subs[pkg] ?? ["(no submodules)"]).join(" ")}`);
+                console.log(`	${pkg.padEnd(12)} <- ${(subs[pkg] ?? ["(no submodules)"]).join(" ")}`);
             }
             console.log(`depends: rerun with --build (sync+build) or --install (sync+build+install)` +
                 ` — --only narrows, --force passes FORCE=1 to the Makefiles`);
@@ -144,7 +144,7 @@ export default defineCommand({
             ` (${noSync ? "no sync" : "synced"}${dry ? ", dry-run" : ""})`,
         );
         if (dry) {
-            for (const pkg of targets) console.log(`    [dry-run] make -C dots/${pkg} -f .local/state/depends/${pkg}.Makefile ${mode}`);
+            for (const pkg of targets) console.log(`	[dry-run] make -C dots/${pkg} -f .local/state/depends/${pkg}.Makefile ${mode}`);
             return;
         }
         const makeVars = flags.force ? ["FORCE=1"] : [];
@@ -152,7 +152,7 @@ export default defineCommand({
         for (const pkg of targets) results.push(runDepsRule(pkg, mode, makeVars));
         for (const r of results) {
             console.log(`== ${r.pkg}${r.ok ? "" : " (FAILED)"}`);
-            for (const l of r.lines) console.log(`  ${l}`);
+            for (const l of r.lines) console.log(`	${l}`);
         }
         if (results.some((r) => !r.ok)) {
             console.error("depends: FAILED packages above");
