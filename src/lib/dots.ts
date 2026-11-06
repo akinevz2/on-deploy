@@ -123,7 +123,7 @@ export async function readRequires(name = "wm"): Promise<Requires> {
  * on their unstowed user units) packages nobody asked for.
  */
 export function readWmPackages(): string[] {
-    return readFileSync(manifestPath("stows"), "utf8")
+    return readFileSync(manifestPath("stow"), "utf8")
         .split("\n")
         .map((l) => l.trim())
         .filter((l) => l && !l.startsWith("#"))

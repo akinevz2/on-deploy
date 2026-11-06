@@ -121,7 +121,7 @@ function writeSession(session: string): void {
 interface StowsFile { comments: string[]; packages: string[] }
 
 function readStows(): StowsFile {
-    const all = readFileSync(manifestPath("stows"), "utf8").split("\n");
+    const all = readFileSync(manifestPath("stow"), "utf8").split("\n");
     const firstContent = all.findIndex((l) => l.trim() && !l.trim().startsWith("#"));
     const comments = firstContent < 0 ? all.slice() : all.slice(0, firstContent);
     const packages = all
