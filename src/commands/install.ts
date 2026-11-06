@@ -81,9 +81,7 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
 
 export default defineCommand({
     name: "install",
-    description:
-        "Install the missing wm.required binaries (per-distro resolver).\n" +
-        "\t--yes non-interactive, --dry-run preview, --only subset.",
+    description: "Install missing binaries",
     options: {
         yes: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "install without confirmation (non-interactive)",

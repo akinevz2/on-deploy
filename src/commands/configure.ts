@@ -412,9 +412,7 @@ async function tuiEdit(m: Manifest): Promise<EditResult> {
 
 export default defineCommand({
     name: "configure",
-    description:
-        "Configure the deployment manifests (all four) + git identity.\n" +
-        "\tflags edit directly; the TUI wizard deploys on save (skipped when chained).",
+    description: "Edit deploy manifests",
     options: {
         target: option(z.string().optional(), {
             description: "set the deploy target directly",

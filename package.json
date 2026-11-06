@@ -1,6 +1,6 @@
 {
   "name": "on-deploy",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "The doftiles deployment orchestrator: verifies the wm.required binaries through the per-distro deploy scripts, drives the per-package depends Makefiles, and carries the services/configure verbs.",
   "type": "module",
   "bin": {

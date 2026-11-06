@@ -176,9 +176,7 @@ async function resolveInteractive(pkgs: string[], opts: PreserveOptions): Promis
 
 export default defineCommand({
     name: "preserve",
-    description:
-        "Resolve stow conflicts before (re)stowing.\n" +
-        "\tper-file TUI with side-by-side diff; archive-first default.",
+    description: "Resolve stow conflicts",
     options: {
         "dry-run": option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "print the plan per package, change nothing",

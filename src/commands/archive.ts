@@ -14,9 +14,7 @@ import { archivePackage } from "../lib/defaults";
 
 export default defineCommand({
     name: "archive",
-    description:
-        "Back up a package's non-dots $HOME files into dots/defaults/.\n" +
-        "\t--dry-run lists; the checkout keeps everything.",
+    description: "Back up non-dots files",
     options: {
         "dry-run": option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "list what would be collected, copy nothing",

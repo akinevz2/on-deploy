@@ -11,7 +11,7 @@ import { pkgOpTui } from "./tuiRunner";
 
 export default defineCommand({
     name: "stow",
-    description: "Stow packages (TUI or explicit list) — stow",
+    description: "Stow packages",
     options: {
         only: option(z.string().optional(), {
             description: "comma/space-separated packages (skips the TUI)",

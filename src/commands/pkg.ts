@@ -15,7 +15,7 @@
 import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
 import { checkDotsEnv, readRequires } from "../lib/dots";
-import { echoHelpList , say } from "../lib/lines";
+import { say } from "../lib/lines";
 import { resolvePackage } from "../lib/deployScript";
 import {
     familyPkgManager, PKG_MANAGER_ID, PKG_OP,
@@ -27,9 +27,7 @@ type Op = "installed" | "search" | "install" | "remove";
 
 export default defineCommand({
     name: "pkg",
-    description:
-        "<op> via the deploy target's package manager.\n" +
-        "\ton-deploy pkg installed|search|install|remove <name>...",
+    description: "Distro package ops",
     options: {
         yes: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "no confirmations (non-interactive)",
@@ -47,15 +45,6 @@ export default defineCommand({
         }
         const [op, ...names] = positional;
         const OPS: Op[] = ["installed", "search", "install", "remove"];
-        if (op === "help" && names.length === 0) {
-            echoHelpList("pkg", "usage\ton-deploy pkg <op> <name>... [--yes|--dry-run]", [
-                "installed\tprobe the deploy state",
-                "search\tresolve the package providing the binary",
-                "install\tinstall via the deploy target manager",
-                "remove\tremove via the deploy target manager",
-            ]);
-            process.exit(0);
-        }
         if (!op || !OPS.includes(op as Op) || names.length === 0) {
             say(`pkg: ${op || "(no op)"} is not a pkg op`);
             say("pkg:\tusage\ton-deploy pkg <op> <name>...");

@@ -21,7 +21,7 @@ import { join } from "node:path";
 import {
     checkDotsEnv, DOTS_DIR, readWmPackages,
 } from "../lib/dots";
-import { echoHelpList , say } from "../lib/lines";
+import { say } from "../lib/lines";
 import { printResults, pkgMakefile, runMakeSpun, type PkgResult } from "../lib/pkgops";
 import { releaseTui, tuiChecklist, tuiSelect } from "../lib/tui";
 
@@ -49,9 +49,7 @@ export function packagesWithMakefiles(dots: string): string[] {
 
 export default defineCommand({
     name: "packages",
-    description:
-        "Group ops over the dependency Makefiles (install|start|stop|uninstall|status|disable|enable).\n" +
-        "\tbare = the TUI; the walk is scoped to stows.required.",
+    description: "Group ops over Makefiles",
     handler: async ({ positional }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
@@ -106,18 +104,6 @@ export default defineCommand({
             return;
         }
 
-        if (rule === "help") {
-            echoHelpList("packages", "usage\ton-deploy packages <rule> [pkg...]", [
-                "install\ttoolchain + build + link + stow",
-                "build\tthe checkout's own build recipes",
-                "link\tstage the artifact into the package .local/bin",
-                "uninstall\tremove the artifact + links + record",
-                "status\tbinary / artifact / record report",
-                "start stop enable disable\tunits (no-ops for binaries)",
-                "list\tprint packages with Makefiles",
-            ]);
-            return;
-        }
 
         if (!rule || rule === "list") {
             console.log(`packages: ${available.join(" ") || "(none)"}`);

@@ -50,9 +50,7 @@ export async function collect(): Promise<{ rows: CheckRow[]; target: string }> {
 
 export default defineCommand({
     name: "check",
-    description: "Verify the environment + requirements (nothing installs)..\n" +
-         +
-	"\t--json for the machine adapter.",
+    description: "Verify env + requirements",
     options: {
         json: option(z.boolean().optional(), { argumentKind: "flag" as const, description: "machine-readable output" }),
     },

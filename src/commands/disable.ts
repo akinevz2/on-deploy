@@ -11,7 +11,7 @@ import { pkgOpTui } from "./tuiRunner";
 
 export default defineCommand({
     name: "disable",
-    description: "Disable packages (TUI or explicit list) — disable",
+    description: "Disable packages",
     options: {
         only: option(z.string().optional(), {
             description: "comma/space-separated packages (skips the TUI)",

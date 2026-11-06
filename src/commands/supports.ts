@@ -15,7 +15,7 @@ import {
 
 export default defineCommand({
     name: "supports",
-    description: "Report the supported managed transports and method-knob syntax",
+    description: "Show knob + method syntax",
     handler: async () => {
         const { target } = await readRequires().catch(() => ({ target: null }) as { target: string | null });
         console.log("on-deploy supports:");

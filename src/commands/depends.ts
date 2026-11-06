@@ -32,7 +32,7 @@ import { z } from "zod";
 import { join } from "node:path";
 import { checkDotsEnv, DOTS_DIR } from "../lib/dots";
 import { runMakeSpun } from "../lib/pkgops";
-import { echoHelpList , say } from "../lib/lines";
+import { say } from "../lib/lines";
 import {
     depsMakefile, submodulesByPackage, type PkgResult,
 } from "../lib/pkgops";
@@ -68,9 +68,7 @@ async function runDepsRuleSpun(pkg: string, rule: string, makeVars: string[]): P
 
 export default defineCommand({
     name: "depends",
-    description:
-        "Drive the per-package Makefiles over the submodule manifest.\n" +
-        "\t--build build only, --install build+deploy, --only narrows.",
+    description: "Drive package Makefiles",
     options: {
         build: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "sync + run each package's Makefile `build` rule (toolchain + compile, no install)",
@@ -101,16 +99,6 @@ export default defineCommand({
             process.exit(2);
         }
         const raw = (positional ?? [])[0] ?? "";
-        if (raw === "help") {
-            echoHelpList("depends", "usage\ton-deploy depends [--build|--install] [--only <pkgs>] [--force|--dry-run|--no-sync]", [
-                "install\tsync + build + install per package (--install)",
-                "build\tsync + build, nothing placed (--build)",
-                "bare\tthe discovery report: packages, submodules, Makefiles",
-                "only\tcomma/space-separated subset of packages",
-                "no-sync\trun only the Makefile rules — skip the git phase",
-            ]);
-            process.exit(0);
-        }
         const mode = flags.install ? "install" : flags.build ? "build" : "";
         const dry = !!flags["dry-run"];
         const noSync = !!flags["no-sync"];

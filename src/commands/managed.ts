@@ -39,7 +39,7 @@ import {
     registryTransportInstalled,
     type PkgDescriptor,
 } from "../lib/adapters";
-import { echoHelpList, echoOrdered , say } from "../lib/lines";
+import { say } from "../lib/lines";
 import { pkgMakefile, stowPkg, swapArtifact, unstowPkg } from "../lib/pkgops";
 import { lookupTransport } from "../lib/pkgmanagers";
 import { readRequires } from "../lib/dots";
@@ -131,9 +131,7 @@ interface MakeResult { ok: boolean; lines: string[] }
 
 export default defineCommand({
     name: "managed",
-    description:
-        "Route ONE package's ops to its adapter Makefile.\n" +
-        "\tmethod/knob syntax: on-deploy supports.",
+    description: "One package's adapter ops",
     options: {
         method: option(z.string().optional(), {
             description: "Override the doftiles.conf record (PACKAGE=source|pkg)",
@@ -150,19 +148,6 @@ export default defineCommand({
     },
     handler: async ({ flags, positional }) => {
         const [pkg, op, ...extra] = positional ?? [];
-        if (op === "help" || pkg === "help") {
-            echoHelpList("managed", "usage\ton-deploy managed <pkg> <op> [--method|--force|--dry-run]", [
-                "install\troute PACKAGE=source|pkg",
-                "uninstall\tadapter uninstall + unstow + record reset",
-                "status\tdeploy state: artifact + checkout + record",
-                "conf-get\tprint the doftiles.conf record",
-                "conf-set\twrite the record (--value V)",
-                "metadata\tthe metadata items, one line",
-                "toolchain, build, link\tpassthrough make targets",
-                "trust-local, trust-global\tpassthrough make targets",
-            ]);
-            process.exit(0);
-        }
         if (!pkg || !op || extra.length > 0) {
             say(`managed: ${op || "(no op)"} is not a managed op`);
             say("managed:\tusage\ton-deploy managed <pkg> <op>");
@@ -178,10 +163,10 @@ export default defineCommand({
         }
         const consultDesc = consult(pkg);
         if (!consultDesc.ok) {
-            echoOrdered([
+            say(
                 `managed: ${pkg}: ${consultDesc.problem}`,
                 `managed: the adapter consult failed for ${pkg}`,
-            ]);
+            );
             process.exit(2);
         }
         const desc: PkgDescriptor = consultDesc;

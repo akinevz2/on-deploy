@@ -20,12 +20,11 @@ import {
     readServiceOrder, unitify, runServicesAction, SERVICES_ACTIONS,
     type ServicesAction,
 } from "../lib/services";
-import { echoHelpList, say } from "../lib/lines";
+import { say } from "../lib/lines";
 
 export default defineCommand({
     name: "services",
-    description:
-        "Control services.required units over systemd (--user, --no-block, stow-safe disable)",
+    description: "Systemd unit actions",
     options: {
         yes: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "no confirmation (non-interactive)",
@@ -39,16 +38,6 @@ export default defineCommand({
             process.exit(2);
         }
         const raw = positional[0] ?? "";
-        if (raw === "help") {
-            echoHelpList("services", "usage\ton-deploy services <action> [--yes]", [
-                "check\treload + enable --now, no-op when active",
-                "start\treset-failed then start each unit",
-                "stop\tcancel jobs, drop the wants links, stop",
-                "restart\trestart each unit in the order",
-                "status\tis-active per unit",
-            ]);
-            process.exit(0);
-        }
         const action = raw as ServicesAction;
         if (!SERVICES_ACTIONS.includes(action)) {
             say(`services: ${raw || "(no action)"} is not a services action`);

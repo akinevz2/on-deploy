@@ -27,7 +27,7 @@ import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
 import { readRequires } from "../lib/dots";
 import { resolvePackage, runInstall, scriptExists, installed } from "../lib/deployScript";
-import { confirm, echoHelpList , say } from "../lib/lines";
+import { confirm, say } from "../lib/lines";
 
 interface Toolchain {
     /** the single binary that identifies the toolchain */
@@ -193,9 +193,7 @@ async function ensure(
 
 export default defineCommand({
     name: "toolchain",
-    description:
-        "The language toolchains for the adapters.\n" +
-        "\t--bun|--rustup install; --check verify-only; --dry-run preview.",
+    description: "Language toolchains",
     options: {
         bun: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "ensure the bun toolchain (bunli/bun builds)",
@@ -218,16 +216,6 @@ export default defineCommand({
     handler: async ({ flags, positional }) => {
         const f = flags as Record<string, unknown>;
         const raw = (positional ?? [])[0];
-        if (f.help || raw === "help") {
-            echoHelpList("toolchain", "usage\ton-deploy toolchain <key> [--check|--dry-run|--yes]", [
-                "bun\tenable the bun toolchain (bunli builds)",
-                "rustup\trustup default stable provides rustc + cargo",
-                "check\tverify only, installs nothing (exit 2)",
-                "dry-run\tresolve + report, run nothing",
-                "yes\tno confirmation prompts",
-            ]);
-            process.exit(0);
-        }
         const keys = Object.keys(TOOLCHAINS).filter((k) => f[k]);
         if (keys.length !== 1) {
             say(`toolchain: the key ${keys[0] || "(none)"} is not a supported toolchain`);

@@ -17,9 +17,7 @@ import { resolvePackage } from "../lib/deployScript";
 
 export default defineCommand({
     name: "search",
-    description:
-        "Which package provides a binary? (read-only)\n" +
-        "\t--only narrows; --all includes installed.",
+    description: "Find a binary's package",
     options: {
         only: option(z.string().optional(), {
             description: "comma/space-separated subset of binaries to search",
