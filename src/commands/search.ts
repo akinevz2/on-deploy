@@ -17,13 +17,12 @@ import { resolvePackage } from "../lib/deployScript";
 export default defineCommand({
     name: "search",
     description:
-        "Resolve the package that provides given binaries on your system",
+        "Resolve the providing package of required binaries in the target repositories (read-only)",
     options: {
         only: option(z.string().optional(), {
             description: "comma/space-separated subset of binaries to search",
         }),
-        all: option(z.boolean().optional(), {
-            argumentKind: "flag" as const,
+        all: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "search EVERY binary, including installed ones",
             short: "a",
         }),
@@ -43,15 +42,15 @@ export default defineCommand({
         for (const binary of wanted) {
             const installedNow = !missing([binary]).length;
             if (installedNow && !flags.all) {
-                console.log(`	${binary}	installed (--all to resolve anyway)`);
+                console.log(`  ${binary.padEnd(20)} installed (--all to resolve anyway)`);
                 continue;
             }
             const res = await resolvePackage(requires.target, binary);
             if (res.ok) {
-                console.log(`	${binary}	-> ${res.pkg}`);
+                console.log(`  ${binary.padEnd(20)} -> ${res.pkg}`);
             } else {
-                console.log(`	${binary}	UNRESOLVED`);
-                console.log(`	${" ".repeat(20)} ${res.problem ?? ""}`);
+                console.log(`  ${binary.padEnd(20)} UNRESOLVED`);
+                console.log(`  ${" ".repeat(20)} ${res.problem ?? ""}`);
                 failed += 1;
             }
         }

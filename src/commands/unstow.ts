@@ -10,7 +10,7 @@ import { pkgOpTui } from "./tuiRunner";
 
 export default defineCommand({
     name: "unstow",
-    description: "Unstow packages",
+    description: "Unstow packages (TUI or explicit list) — unstow",
     options: {
         only: option(z.string().optional(), {
             description: "comma/space-separated packages (skips the TUI)",

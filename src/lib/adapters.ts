@@ -29,7 +29,6 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { pkgMakefile } from "./pkgops";
 import { TRANSPORTS, type PkgManagerSpec } from "./pkgmanagers";
 
 export const DOTS = join(process.env.HOME!, "dots");
@@ -170,19 +169,18 @@ export function consult(pkg: string): PkgDescriptor {
     const raw: Record<string, string> = {};
     let ok = true;
     let problem: string | undefined;
-    const host = pkgMakefile(pkg);
-    if (!host) problem = `no adapter for ${pkg}`;
+    if (!hasMakefile(pkg)) problem = "no adapter (dots/<pkg>/.local/state/depends/<pkg>.Makefile)";
     if (problem) ok = false;
 
     if (ok) {
         const r = Bun.spawnSync([
-            "make", "-C", host!.dir, "--no-print-directory",
-            "-f", host!.file, "metadata",
+            "make", "-C", join(DOTS, pkg), "--no-print-directory",
+            "-f", `.local/state/depends/${pkg}.Makefile`, "metadata",
         ], { stdout: "pipe", stderr: "pipe" });
         const out = `${r.stdout ?? ""}`;
         if ((r.exitCode ?? 1) !== 0) {
             ok = false;
-            problem = "the adapter prints no metadata contract";
+            problem = `metadata consult failed: ${`${r.stderr ?? ""}`.trim().split("\n")[0]}`;
         } else {
             const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
             raw.git_repo = lines[0] ?? "";
@@ -193,16 +191,13 @@ export function consult(pkg: string): PkgDescriptor {
         }
     }
 
-    // the anchor DOTS package: the invocation name (doftiles) maps to
-    // the HOST package through the adapter (depends)
-    const anchorPkg = host?.pkg ?? pkg;
-    const repoPkgName = safeReposPkgName(raw, anchorPkg);
-    const pkgName = safePkgName(raw, anchorPkg);
-    const subDir = safeSubDir(anchorPkg, pkgName);
-    const artifact = safeArtifact(anchorPkg, repoPkgName);
+    const repoPkgName = safeReposPkgName(raw, pkg);
+    const pkgName = safePkgName(raw, pkg);
+    const subDir = safeSubDir(pkg, pkgName);
+    const artifact = subDir ? safeArtifact(pkg, repoPkgName) : undefined;
     return {
-        pkg: anchorPkg,
-        key: safeKeyName(anchorPkg),
+        pkg,
+        key: safeKeyName(pkg),
         repoUrl: safeRepoUrl(raw),
         pkgName,
         subDir,

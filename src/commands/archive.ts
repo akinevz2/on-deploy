@@ -14,11 +14,10 @@ import { archivePackage } from "../lib/defaults";
 export default defineCommand({
     name: "archive",
     description:
-        "Back up your current config files to the stow package defaults/ (~/dots/defaults/)",
+        "Back up the current (not dots-owned) $HOME files of a stow package into ~/dots/defaults/",
     options: {
-        "dry-run": option(z.boolean().optional(), {
-            argumentKind: "flag" as const,
-            description: "display collection targets, perform no-op",
+        "dry-run": option(z.boolean().optional(), { argumentKind: "flag" as const,
+            description: "list what would be collected, copy nothing",
         }),
     },
     handler: async ({ flags, positional }) => {
@@ -29,7 +28,7 @@ export default defineCommand({
         }
         const pkg = positional[0] ?? "";
         if (!pkg || !existsSync(join(DOTS_DIR, pkg, ".local"))) {
-            console.error(`archive: not a stow package, ${pkg}`);
+            console.error(`archive: not a stow package: ${pkg}`);
             console.error("archive: usage: on-deploy archive <pkg>");
             process.exit(2);
         }
@@ -39,7 +38,7 @@ export default defineCommand({
             return;
         }
         console.log(`archive ${pkg}: ${rows.length} item(s) ${flags["dry-run"] ? "would be collected" : "collected"}:`);
-        for (const r of rows) console.log(`	${r.rel} (${r.kind})`);
+        for (const r of rows) console.log(`  ${r.rel} (${r.kind})`);
         if (!flags["dry-run"]) {
             console.log(`archive ${pkg}: restore: on-deploy unarchive ${pkg}`);
         }

@@ -30,19 +30,19 @@ export function stowPackages(): string[] {
  *     hosts its submodules' build/link/install recipes; run with -f)
  * or, as a fallback for packages NOT yet migrated (e.g. polybar's
  * bar-control Makefile), the legacy hook directory:
- *   dots/<pkg>/.local/state/depends/<pkg>.Makefile
+ *   dots/<pkg>/.local/share/<pkg>/Makefile
  * Returns { dir, file } where dir is the `make -C` cwd and file the
  * repo-relative makefile to run.
  */
-export function pkgMakefile(pkg: string): { dir: string; file: string; pkg: string } | null {
+export function pkgMakefile(pkg: string): { dir: string; file: string } | null {
     const dir = join(DOTS, pkg);
     const stateFile = join(dir, ".local", "state", "depends", `${pkg}.Makefile`);
     if (existsSync(stateFile)) {
-        return { dir, file: join(".local", "state", "depends", `${pkg}.Makefile`), pkg };
+        return { dir, file: join(".local", "state", "depends", `${pkg}.Makefile`) };
     }
     const shareDir = join(dir, ".local", "share", pkg);
     if (existsSync(join(shareDir, "Makefile"))) {
-        return { dir: shareDir, file: "Makefile", pkg };
+        return { dir: shareDir, file: "Makefile" };
     }
     return null;
 }
@@ -51,8 +51,9 @@ export function hasMakefile(pkg: string): boolean {
     return pkgMakefile(pkg) !== null;
 }
 
-/** the depends-scheme Makefile of a package — the same-name
- *  dots/<pkg>/.local/state/depends/<pkg>.Makefile; full path or null */
+/** the depends-scheme Makefile of a package (the per-submodule
+ *  sync/build/link/install recipes on-deploy `depends` drives) —
+ *  dots/<pkg>/.local/state/depends/<pkg>.Makefile, or null */
 export function depsMakefile(pkg: string): string | null {
     const file = join(DOTS, pkg, ".local", "state", "depends", `${pkg}.Makefile`);
     return existsSync(file) ? file : null;
@@ -200,7 +201,7 @@ export function runRule(pkg: string, rule: string): PkgResult {
 export function printResults(results: PkgResult[]): void {
     for (const r of results) {
         console.log(`== ${r.pkg}${r.ok ? "" : " (FAILED)"}`);
-        for (const l of r.lines) console.log(`	${l}`);
+        for (const l of r.lines) console.log(`  ${l}`);
     }
 }
 

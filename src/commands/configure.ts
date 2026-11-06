@@ -227,42 +227,34 @@ async function promptCredentials(): Promise<{ name: string; email: string } | nu
     if (existsSync(CRED_REPO) || existsSync(CRED_HOME)) return null;
     if (!process.stdin.isTTY) return null;
     console.log("configure: no git credentials on file (~/.my-credentials missing)");
-    console.log("	the shell rc files load git identity from that file at startup");
-    console.log("	two lines: your full name, then your email.");
+    console.log("  the shell rc files load git identity from that file at startup —");
+    console.log("  two lines: your full name, then your email.");
     for (;;) {
-        process.stdout.write("	name	(empty=skip): ");
+        process.stdout.write("  name  (empty=skip): ");
         const nameLine = await readLine();
         if (nameLine === null) {
-            console.log("configure: EOF (ctrl-d)");
-            console.log("configure: skipped");
-            console.log("configure: git identity stays unset (re-run 'on-deploy configure' later)");
+            console.log("configure: EOF (ctrl-d) — skipped; git identity stays unset (re-run 'on-deploy configure' later)");
             return null;
         }
         const name = nameLine.trim();
         if (!name) {
-            console.log("configure: skipped");
-            console.log("configure: git identity stays unset (re-run 'on-deploy configure' later)");
+            console.log("configure: skipped — git identity stays unset (re-run 'on-deploy configure' later)");
             return null;
         }
-        process.stdout.write("	email (empty=skip): ");
+        process.stdout.write("  email (empty=skip): ");
         const emailLine = await readLine();
         if (emailLine === null) {
-            console.log("configure: EOF (ctrl-d)");
-            console.log("configure: skipped");
-            console.log("configure: git identity stays unset (re-run 'on-deploy configure' later)");
+            console.log("configure: EOF (ctrl-d) — skipped; git identity stays unset (re-run 'on-deploy configure' later)");
             return null;
         }
         const email = emailLine.trim();
         if (!email) {
-            console.log("configure: skipped");
-            console.log("configure: git identity stays unset (re-run 'on-deploy configure' later)");
+            console.log("configure: skipped — git identity stays unset (re-run 'on-deploy configure' later)");
             return null;
         }
         const warn = validCredentials(name, email);
         if (!warn) return { name, email };
-        console.log(`configure: ${warn}`);
-        console.log("configure: try again");
-        console.log("configure: or leave the name empty to skip");
+        console.log(`configure: ${warn} — try again (or leave name empty to skip)`);
     }
 }
 
@@ -281,24 +273,22 @@ async function tuiEdit(m: Manifest): Promise<EditResult> {
         const stows = readStows();
         const subs = readSubs();
         const a = await tuiSelect("configure — what to edit?", [
-            { label: `deploy target:	${m.target}`, value: "target" },
+            { label: `deploy target:     ${m.target}`, value: "target" },
             { label: `required binaries: ${m.binaries.join(" ")}`, value: "binaries" },
-            { label: `session model:	${session || "wsl-systemd (default)"}`, value: "session" },
-            { label: `stow packages:	${stows.packages.join(" ") || "(none)"}`, value: "stows" },
-            { label: `submodules:	${subs.entries.map((e) => e.pkg).join(" ") || "(none)"}`, value: "subs" },
-            { label: `git credentials:	${cred.name || "(unset)"} <${cred.email || "none"}>`, value: "credentials" },
+            { label: `session model:     ${session || "wsl-systemd (default)"}`, value: "session" },
+            { label: `stow packages:     ${stows.packages.join(" ") || "(none)"}`, value: "stows" },
+            { label: `submodules:        ${subs.entries.map((e) => e.pkg).join(" ") || "(none)"}`, value: "subs" },
+            { label: `git credentials:   ${cred.name || "(unset)"} <${cred.email || "none"}>`, value: "credentials" },
             { label: "save + apply", value: "save" },
             { label: "quit without saving", value: "quit" },
         ]);
         if (a === null) {
             // esc/ctrl-c at the ROOT = hard cancel (exit code 130 → make stops)
-            console.log("configure: cancelled");
-            console.log("configure: nothing saved");
+            console.log("configure: cancelled — nothing saved");
             process.exit(130);
         }
         if (a === "quit") {
-            console.log("configure: quit without saving");
-            console.log("configure: nothing changed");
+            console.log("configure: quit without saving — nothing changed");
             return "quit";
         }
         if (a === "save") break;
@@ -341,9 +331,7 @@ async function tuiEdit(m: Manifest): Promise<EditResult> {
                 if (add === null || !add.trim()) break;
                 const fields = add.trim().split(/\s+/);
                 if (fields.length < 2) {
-                    console.log("configure: need <pkg> AND at least one <path>");
-                    console.log("configure: retry");
-                    console.log("configure: empty to skip");
+                    console.log("configure: need <pkg> AND at least one <path> — retry (empty to skip)");
                     continue;
                 }
                 kept.push({ pkg: fields[0], paths: fields.slice(1) });
@@ -425,7 +413,7 @@ async function tuiEdit(m: Manifest): Promise<EditResult> {
 export default defineCommand({
     name: "configure",
     description:
-        "Configure the deployment manifests: target, binaries, model, services, identity",
+        "Configure the deployment: target + binaries (wm.required), deployment model + services (deploy.profile), git credentials (dots/shell/.my-credentials)",
     options: {
         target: option(z.string().optional(), {
             description: "set the deploy target directly",
@@ -476,12 +464,12 @@ export default defineCommand({
         if (flags.show) {
             const stowsNow = readStows();
             const subsNow = readSubs();
-            console.log(`target:	${m.target}`);
-            console.log(`binaries:	${m.binaries.join(" ")}`);
-            console.log(`session:	${readSession() || "wsl-systemd (default)"}`);
-            console.log(`stows:	${stowsNow.packages.join(" ") || "(none)"}`);
+            console.log(`target:    ${m.target}`);
+            console.log(`binaries:  ${m.binaries.join(" ")}`);
+            console.log(`session:   ${readSession() || "wsl-systemd (default)"}`);
+            console.log(`stows:     ${stowsNow.packages.join(" ") || "(none)"}`);
             console.log(`submodules:${subsNow.entries.map((e) => " [" + [e.pkg, ...e.paths].join(" ") + "]").join("") || " (none)"}`);
-            console.log(`git:	${cred.name || "(unset)"} <${cred.email}>`);
+            console.log(`git:       ${cred.name || "(unset)"} <${cred.email}>`);
             return;
         }
 
@@ -504,7 +492,7 @@ export default defineCommand({
         }
         if (flags.session) {
             if (!SESSIONS.includes(flags.session)) {
-                console.error(`configure: unknown session, ${flags.session} (valid: ${SESSIONS.join("|")})`);
+                console.error(`configure: unknown session '${flags.session}' (${SESSIONS.join("|")})`);
                 process.exit(2);
             }
             writeSession(flags.session);
@@ -532,13 +520,12 @@ export default defineCommand({
                 const pkg = spec.split(":", 1)[0];
                 let path = spec.slice(pkg.length + 1);
                 if (!path) {
-                    console.error(`configure: add-subs needs pkg:path, no path in ${spec}`);
+                    console.error(`configure: add-subs needs pkg:path — '${spec}' has no path`);
                     process.exit(2);
                 }
                 path = path.replace(/^dots\//, "");
                 if (!existsSync(join(DOTS_DIR, path))) {
-                    console.error("configure: submodule path does not exist in the dots checkout,");
-                console.error(`configure: ${path}`);
+                    console.error(`configure: submodule path '${path}' does not exist in the dots checkout`);
                     process.exit(2);
                 }
                 const existing = s.entries.find((e) => e.pkg === pkg);
@@ -571,9 +558,7 @@ export default defineCommand({
             // keeps the recorded manifest and just gets the folded apply.
             const ttyMenu = process.stdin.isTTY && process.stdout.isTTY;
             if (!ttyMenu) {
-                console.log("configure: non-interactive");
-                console.log("configure: keeping the recorded configuration");
-                console.log("configure: applying it");
+                console.log("configure: non-interactive — keeping the recorded configuration; applying it");
             }
             if (ttyMenu) {
                 const saved = await tuiEdit(m);
@@ -581,8 +566,7 @@ export default defineCommand({
                     // quit: the manifest stays as recorded and NOTHING is
                     // applied (the explicit "quit without saving" menu pick;
                     // re-run deploy to deploy an older recorded config)
-                    console.log("configure: quit");
-                    console.log("configure: recorded configuration kept");
+                    console.log("configure: quit — recorded configuration kept");
                     return;
                 }
                 // the WIZARD: the saved configuration now drives the full
@@ -594,13 +578,11 @@ export default defineCommand({
                 );
                 if (go === null) {
                     // esc/ctrl-c at the wizard gate: hard cancel
-                    console.log("configure: cancelled after save");
-                    console.log("configure: deployment stopped");
+                    console.log("configure: cancelled after save — deployment stopped");
                     process.exit(130);
                 }
                 if (!go) {
-                    console.log("configure: saved, deployment skipped");
-                    console.log("configure: re-run 'make install' to deploy");
+                    console.log("configure: saved (deployment skipped — re-run 'make install' to deploy)");
                     return;
                 }
                 if (go) {

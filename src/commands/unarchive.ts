@@ -13,11 +13,10 @@ import { unarchivePackage } from "../lib/defaults";
 export default defineCommand({
     name: "unarchive",
     description:
-        "Restore stowed old user package defaults/ backups into $HOME",
+        "Restore a stow package's defaults/ backups into $HOME (skips dots-owned paths)",
     options: {
-        "dry-run": option(z.boolean().optional(), {
-            argumentKind: "flag" as const,
-            description: "display contents, perform no-op",
+        "dry-run": option(z.boolean().optional(), { argumentKind: "flag" as const,
+            description: "list what would be restored, copy nothing",
         }),
     },
     handler: async ({ flags, positional }) => {
@@ -38,6 +37,6 @@ export default defineCommand({
             return;
         }
         console.log(`unarchive ${pkg}: ${rels.length} item(s) ${flags["dry-run"] ? "would be restored" : "restored"}:`);
-        for (const rel of rels) console.log(`	${rel}`);
+        for (const rel of rels) console.log(`  ${rel}`);
     },
 });

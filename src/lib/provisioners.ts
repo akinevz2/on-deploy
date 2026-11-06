@@ -18,7 +18,7 @@ export function sh(cmd: string, args: string[]): { code: number; out: string } {
 
 export async function sudo(cmd: string, args: string[], dryRun: boolean): Promise<number> {
     if (dryRun) {
-        console.log(`	[dry-run] sudo ${cmd} ${args.join(" ")}`);
+        console.log(`    [dry-run] sudo ${cmd} ${args.join(" ")}`);
         return 0;
     }
     const p = Bun.spawn(["sudo", cmd, ...args], {
@@ -73,7 +73,7 @@ export interface TargetPkgRequest {
     pkgMgr: PkgManagerId;
     op: PkgOpKind;
     names: string[];
-    /** interactive confirmations gate (the caller owns --force) */
+    /** interactive confirmations gate (the caller owns --yes) */
     dry: boolean;
 }
 
@@ -183,7 +183,7 @@ export function detectDisplay(): { display: string; ok: boolean; probed: string[
  *  when absent, fetches the latest installer from the SourceForge
  *  release API and runs it silently (InnoSetup /VERYSILENT) through
  *  WSL interop. Gated: dry-run reports only; the explicit run needs
- *  the caller's confirm/--force. deploy target code (the external X server
+ *  the caller's confirm/--yes. deploy target code (the external X server
  *  of the wsl-systemd deployment model), not package management. */
 export async function ensureVcxsrv(
     yes: boolean, dryRun: boolean,
@@ -230,9 +230,9 @@ export async function ensureVcxsrv(
         return { name: "vcxsrv", ok: false, detail: "no installer in the release feed", problem: "no installer found" };
     }
     if (!yes) {
-        const ok = await confirm(`	download + silently install VcXsrv from\n	${url}\n	proceed? [y/N] `);
+        const ok = await confirm(`  download + silently install VcXsrv from\n    ${url}\n  proceed? [y/N] `);
         if (ok === "abort") {
-            console.error("	EOF (ctrl-d): provision stopped");
+            console.error("  EOF (ctrl-d): provision stopped");
             process.exit(130);
         }
         if (ok !== "yes") return { name: "vcxsrv", ok: false, detail: "declined", problem: "declined" };

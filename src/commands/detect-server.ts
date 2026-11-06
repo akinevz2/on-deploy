@@ -50,12 +50,12 @@ function probeAddress(d: string): boolean {
  *  returns a stderr-explained failure rather than throwing on SysV. */
 function persistSystemd(display: string): boolean {
     if (!sh("sh", ["-c", "command -v systemctl"]).out) {
-        console.error("detect-server: skipping --persist-to-systemd, systemd not present");
+        console.error("detect-server: systemd not present — skipping --persist-to-systemd");
         return false;
     }
     const up = sh("sh", ["-c", "systemctl --user >/dev/null 2>&1"]);
     if (up.code !== 0) {
-        console.error("detect-server: skipping --persist-to-systemd, the systemd user session is not reachable");
+        console.error("detect-server: systemd user session not reachable — skipping --persist-to-systemd");
         return false;
     }
     const r = sh("systemctl", ["--user", "set-environment", `DISPLAY=${display}`]);
@@ -63,7 +63,7 @@ function persistSystemd(display: string): boolean {
         console.error(`detect-server: systemd user environment DISPLAY=${display} set`);
         return true;
     }
-    console.error("detect-server: skipping, systemctl --user set-environment failed");
+    console.error("detect-server: systemctl --user set-environment failed — skipping");
     return false;
 }
 
@@ -93,7 +93,7 @@ function persistEnvFile(path: string, display: string): boolean {
 export default defineCommand({
     name: "detect-server",
     description:
-        "Probe a reachable X server, persist its DISPLAY (the --persist flag pair; an ADDRESS probes first)",
+        "Probe a reachable X server and print it; optionally persist DISPLAY to the systemd user session (--persist-to-systemd) or an includeable sh env file (--persist-to-env=<file>). An optional ADDRESS is checked and persisted instead of autodetecting.",
     options: {
         "persist-to-systemd": option(z.boolean().optional(), {
             description: "set DISPLAY in the systemd --user manager environment (no-op on SysV)",
@@ -123,15 +123,14 @@ export default defineCommand({
             // explicit address: checked, never silently replaced — an
             // unreachable user-specified server is an error, not a probe miss
             if (!probeAddress(addr)) {
-                console.error(`detect-server: not persisting, ${addr} does not answer xset q`);
+                console.error(`detect-server: ${addr} does not answer xset q — not persisting it`);
                 process.exit(1);
             }
             display = addr;
         } else {
             const r = detectDisplay();
             if (!r.ok) {
-                console.error("detect-server: no reachable X display");
-            console.error(`detect-server: probed	${r.probed.join(" ") || "(none)"}`);
+                console.error(`detect-server: no reachable X display — probed:${r.probed.join(" ") || " (none)"}`);
                 process.exit(1);
             }
             display = r.display;

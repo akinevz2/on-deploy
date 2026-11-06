@@ -270,7 +270,7 @@ export interface PreserveSeams {
 
 export interface PreserveOptions {
     dryRun: boolean;
-    /** -f/--force: skip prompts, apply the default (keep) branch */
+    /** -y/--yes: skip prompts, apply the default (keep) branch */
     yes: boolean;
     /** skip prompt, keep the deployed content */
     keep: boolean;
@@ -312,8 +312,8 @@ export async function preservePackage(
     // --- hard conflicts: never fixable, abort before any write ---------
     if (scan.hard.length > 0) {
         lines.push(`preserve ${pkg}: ${scan.hard.length} hard conflict(s) — directory where the package has a file:`);
-        for (const c of scan.hard) lines.push(`	${c.homePath} (directory)`);
-        lines.push("	→ stow cannot resolve these (not even --adopt); resolve by hand, then re-run");
+        for (const c of scan.hard) lines.push(`  ${c.homePath} (directory)`);
+        lines.push("  → stow cannot resolve these (not even --adopt); resolve by hand, then re-run");
         return { pkg, status: "hard-conflict", code: 1, lines };
     }
 
@@ -322,12 +322,12 @@ export async function preservePackage(
     if (dirty) {
         if (opts.adopt) {
             lines.push(`preserve ${pkg}: worktree dirty — commit or stash before --adopt:`);
-            for (const l of dirty.split("\n")) lines.push(`	${l}`);
-            lines.push("	→ a clean HEAD is the restore point --adopt depends on; nothing was changed");
+            for (const l of dirty.split("\n")) lines.push(`  ${l}`);
+            lines.push("  → a clean HEAD is the restore point --adopt depends on; nothing was changed");
             return { pkg, status: "dirty-abort", code: 2, lines };
         }
         lines.push(`preserve ${pkg}: worktree dirty (non-blocking for the default flow):`);
-        for (const l of dirty.split("\n")) lines.push(`	${l}`);
+        for (const l of dirty.split("\n")) lines.push(`  ${l}`);
     }
 
     const conflicts = scan.conflicts;
@@ -338,12 +338,12 @@ export async function preservePackage(
             lines.push(`preserve ${pkg}: nothing to preserve (dots-owned or absent)`);
         } else {
             lines.push(`preserve ${pkg}: ${conflicts.length} conflict(s) would be preserved (mode=${mode}):`);
-            for (const c of conflicts) lines.push(`	${c.rel} (${c.kind})`);
-            lines.push(`	store: ${store}`);
+            for (const c of conflicts) lines.push(`  ${c.rel} (${c.kind})`);
+            lines.push(`  store: ${store}`);
             if (!opts.adopt) {
-                for (const c of conflicts) lines.push(`	[dry-run] remove ${c.homePath}`);
+                for (const c of conflicts) lines.push(`  [dry-run] remove ${c.homePath}`);
             }
-            lines.push(`	[dry-run] stow ${opts.adopt ? "-R --adopt" : "-R"} -t ${home} ${pkg}`);
+            lines.push(`  [dry-run] stow ${opts.adopt ? "-R --adopt" : "-R"} -t ${home} ${pkg}`);
         }
         return { pkg, status: "dry-run", code: 0, lines };
     }
@@ -353,7 +353,7 @@ export async function preservePackage(
         lines.push(`preserve ${pkg}: nothing to preserve (dots-owned or absent)`);
         const r = seams.stow ? seams.stow(pkg, false) : stowWithAdopt(pkg, false, home, dots);
         if (!r.ok) {
-            lines.push(...r.lines, `	stow FAILED for ${pkg}`);
+            lines.push(...r.lines, `  stow FAILED for ${pkg}`);
             return { pkg, status: "failed", code: 1, lines };
         }
         lines.push(`preserve ${pkg}: stowed ${pkg} (no conflicts)`);
@@ -383,11 +383,11 @@ export async function preservePackage(
         );
         for (const d of decisions) {
             const c = conflicts.find((x) => x.rel === d.rel);
-            lines.push(`	${d.rel} (${c?.kind ?? "?"}) -> ${d.decision === "mine" ? "ADOPTED (you may want to commit it)" : "dots version (mine is in the store)"}`);
+            lines.push(`  ${d.rel} (${c?.kind ?? "?"}) -> ${d.decision === "mine" ? "ADOPTED (you may want to commit it)" : "dots version (mine is in the store)"}`);
         }
         const r = seams.stow ? seams.stow(pkg, false) : stowWithAdopt(pkg, false, home, dots);
         if (!r.ok) {
-            lines.push(...r.lines, `	stow FAILED for ${pkg} after resolving — see store`);
+            lines.push(...r.lines, `  stow FAILED for ${pkg} after resolving — see store`);
             return { pkg, status: "failed", code: 1, lines };
         }
         lines.push(`preserve ${pkg}: stowed (mixed resolution)`);
@@ -400,10 +400,10 @@ export async function preservePackage(
         writePreserveManifest(store, pkg, mode, conflicts);
         removeConflicts(conflicts);
         lines.push(`preserve ${pkg}: ${copied.length} conflict(s) preserved to ${store}:`);
-        for (const c of conflicts) lines.push(`	${c.rel} (${c.kind})`);
+        for (const c of conflicts) lines.push(`  ${c.rel} (${c.kind})`);
         const r = seams.stow ? seams.stow(pkg, false) : stowWithAdopt(pkg, false, home, dots);
         if (!r.ok) {
-            lines.push(...r.lines, `	stow FAILED for ${pkg} after preserving — see store`);
+            lines.push(...r.lines, `  stow FAILED for ${pkg} after preserving — see store`);
             return { pkg, status: "failed", code: 1, lines };
         }
         lines.push(`preserve ${pkg}: deployed the dots version; user bytes safe in ${store}`);
@@ -415,25 +415,25 @@ export async function preservePackage(
             else {
                 // non-TTY: never block; default is keep-the-dots-version
                 if (!process.stdin.isTTY) {
-                    lines.push("	(non-tty — keeping the dots version; restore later: on-deploy preserve " + pkg + " --restore)");
+                    lines.push("  (non-tty — keeping the dots version; restore later: on-deploy preserve " + pkg + " --restore)");
                 }
             }
         }
         if (restore) {
             lines.push(`preserve ${pkg}: restoring the stored user content…`);
             const restored = restoreFromStore(dots, pkg, store);
-            for (const rel of restored) lines.push(`	restored ${rel}`);
+            for (const rel of restored) lines.push(`  restored ${rel}`);
             const r2 = seams.stow ? seams.stow(pkg, false) : stowWithAdopt(pkg, false, home, dots);
-            if (!r2.ok) lines.push(...r2.lines, `	stow FAILED after restore`);
+            if (!r2.ok) lines.push(...r2.lines, `  stow FAILED after restore`);
             const stat = gitDiffStat(dots, pkg);
             if (stat) {
-                lines.push(`	git diff --stat for ${pkg} (your content is now in the worktree):`);
-                for (const l of stat.split("\n")) lines.push(`	${l}`);
+                lines.push(`  git diff --stat for ${pkg} (your content is now in the worktree):`);
+                for (const l of stat.split("\n")) lines.push(`    ${l}`);
             }
-            lines.push(`	keep: git add -- <paths> && git commit (never auto-committed)`);
-            lines.push(`	or revert: git -C ~/dots checkout HEAD -- ${pkg}`);
+            lines.push(`  keep: git add -- <paths> && git commit (never auto-committed)`);
+            lines.push(`  or revert: git -C ~/dots checkout HEAD -- ${pkg}`);
         } else {
-            lines.push(`	restore later: on-deploy preserve ${pkg} --restore`);
+            lines.push(`  restore later: on-deploy preserve ${pkg} --restore`);
         }
         return { pkg, status: "ok", code: 0, lines };
     }
@@ -441,17 +441,17 @@ export async function preservePackage(
     // --- adopt flow ("mine wins") --------------------------------------
     const r = seams.stow ? seams.stow(pkg, true) : stowWithAdopt(pkg, true, home, dots);
     if (!r.ok) {
-        lines.push(...r.lines, `	stow --adopt FAILED for ${pkg}`);
+        lines.push(...r.lines, `  stow --adopt FAILED for ${pkg}`);
         return { pkg, status: "failed", code: 1, lines };
     }
     const snap = snapshotAdopted(store, join(dots, pkg), conflicts);
     writePreserveManifest(store, pkg, mode, conflicts);
     lines.push(`preserve ${pkg}: adopted ${conflicts.length} file(s) into the repo; deployed = your content (snapshot in ${store}):`);
-    for (const c of conflicts) lines.push(`	${c.rel} (${c.kind})`);
+    for (const c of conflicts) lines.push(`  ${c.rel} (${c.kind})`);
     const stat = gitDiffStat(dots, pkg);
     if (stat) {
-        lines.push(`	git diff --stat for ${pkg}:`);
-        for (const l of stat.split("\n")) lines.push(`	${l}`);
+        lines.push(`  git diff --stat for ${pkg}:`);
+        for (const l of stat.split("\n")) lines.push(`    ${l}`);
     }
     let doRestore = opts.restore;
     // In the adopt flow "restore" means revert to HEAD (dots) content.
@@ -459,7 +459,7 @@ export async function preservePackage(
         if (seams.ask) doRestore = !(await seams.ask(pkg)); // ask = keep-mine?
         else {
             if (!process.stdin.isTTY) {
-                lines.push("	(non-tty — keeping your adopted content; revert later: git -C ~/dots checkout HEAD -- " + pkg);
+                lines.push("  (non-tty — keeping your adopted content; revert later: git -C ~/dots checkout HEAD -- " + pkg);
             }
         }
     }
@@ -471,15 +471,15 @@ export async function preservePackage(
         if ((p.exitCode ?? 1) === 0) {
             lines.push(`preserve ${pkg}: reverted to the dots version (git checkout HEAD -- ${pkg})`);
             const r2 = seams.stow ? seams.stow(pkg, false) : stowWithAdopt(pkg, false, home, dots);
-            if (!r2.ok) lines.push(...r2.lines, `	stow FAILED after revert`);
+            if (!r2.ok) lines.push(...r2.lines, `  stow FAILED after revert`);
         } else {
-            lines.push(`	git checkout FAILED: ${`${p.stderr ?? ""}`.trim()}`);
-            lines.push(`	recovery: git -C ~/dots checkout HEAD -- ${pkg} (your content is also in ${store})`);
+            lines.push(`  git checkout FAILED: ${`${p.stderr ?? ""}`.trim()}`);
+            lines.push(`  recovery: git -C ~/dots checkout HEAD -- ${pkg} (your content is also in ${store})`);
             return { pkg, status: "failed", code: 1, lines };
         }
     } else {
         lines.push(`preserve ${pkg}: keeping your content — review: git -C ~/dots diff -- ${pkg}`);
-        lines.push(`	keep: git add -- <paths> && git commit -m "adopt ${pkg} user files" (never auto-committed)`);
+        lines.push(`  keep: git add -- <paths> && git commit -m "adopt ${pkg} user files" (never auto-committed)`);
         void snap;
     }
     return { pkg, status: "ok", code: 0, lines };

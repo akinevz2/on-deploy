@@ -24,7 +24,7 @@
 //       whole-package adopt-flow ("mine wins"): `stow -R --adopt`
 //         moves $HOME contents into the package tree. A clean worktree
 //         is REQUIRED (clean HEAD = the restore point).
-//   flags: --dry-run --force/-y --keep --restore --store <dir>
+//   flags: --dry-run --yes/-y --keep --restore --store <dir>
 //
 // The store is XDG state (see lib/preserve.ts for the layout), outside
 // the repo. Nothing here is per-package: all behaviors are keyed off
@@ -114,9 +114,7 @@ async function resolveInteractive(pkgs: string[], opts: PreserveOptions): Promis
         { preselect: groups.map((g) => g.pkg) },
     );
     if (chosen === null) {
-        console.log("preserve: cancelled");
-        console.log("preserve: nothing staged");
-        console.log("preserve: deploying the clean packages only");
+        console.log("preserve: cancelled — nothing staged; deploying the clean packages only");
         return worst;
     }
 
@@ -125,7 +123,7 @@ async function resolveInteractive(pkgs: string[], opts: PreserveOptions): Promis
         const group = groups.find((g) => g.pkg === pkg)!;
         if (group.hard.length > 0) {
             console.log(`preserve ${pkg}: hard conflicts skipped (resolve by hand):`);
-            for (const c of group.hard) console.log(`	${c.homePath} (directory where the package needs a file)`);
+            for (const c of group.hard) console.log(`  ${c.homePath} (directory where the package needs a file)`);
             worst = Math.max(worst, 1);
         }
         const resolvable = group.conflicts;
@@ -166,9 +164,7 @@ async function resolveInteractive(pkgs: string[], opts: PreserveOptions): Promis
             }
         }
         if (dotsWins.length === 0 && mineWins.length === 0) {
-            console.log(`preserve ${pkg}:`);
-        console.log(`preserve ${pkg}: no decisions`);
-        console.log(`preserve ${pkg}: left untouched`);
+            console.log(`preserve ${pkg}: no decisions — left untouched`);
             continue;
         }
         const r = await preservePackage(pkg, { ...opts, yes: true, keep: true, dotsWins, mineWins });
@@ -181,12 +177,12 @@ async function resolveInteractive(pkgs: string[], opts: PreserveOptions): Promis
 export default defineCommand({
     name: "preserve",
     description:
-        "Resolve stow conflicts before (re)stowing (the per-file diff UI, else the archive-first keep flow)",
+        "Resolve stow conflicts for packages before (re)stowing — per-file TUI with side-by-side diff, or the archive-first default",
     options: {
         "dry-run": option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "print the plan per package, change nothing",
         }),
-        force: option(z.boolean().optional(), { argumentKind: "flag" as const,
+        yes: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "assume yes (non-interactive; default is keep)",
             short: "y",
         }),
@@ -217,7 +213,7 @@ export default defineCommand({
         if (flags.only) pkgs = flags.only.split(/[,\s]+/).filter(Boolean);
         if (pkgs.length === 0) {
             if (!process.stdin.isTTY) {
-                console.error("preserve: no packages given, and no tty");
+                console.error("preserve: no packages and no tty");
                 console.error("preserve: usage: on-deploy preserve <pkg>|--only <pkgs> [--adopt] [--restore] [--keep] [--dry-run]");
                 process.exit(2);
             }
@@ -235,7 +231,7 @@ export default defineCommand({
 
         const opts: PreserveOptions = {
             dryRun: !!flags["dry-run"],
-            yes: !!flags.force,
+            yes: !!flags.yes,
             keep: !!flags.keep,
             restore: !!flags.restore,
             adopt: !!flags.adopt,
@@ -247,9 +243,10 @@ export default defineCommand({
         const interactive =
             process.stdin.isTTY &&
             process.stdout.isTTY &&
-            !flags.force && !flags.keep && !flags.restore && !flags.adopt && !flags["dry-run"];
+            !flags.yes && !flags.keep && !flags.restore && !flags.adopt && !flags["dry-run"];
+        let worst = 0;
         if (interactive) {
-            const worst = await resolveInteractive(pkgs, opts);
+            worst = await resolveInteractive(pkgs, opts);
             process.exit(worst);
         }
         console.log(
@@ -265,30 +262,24 @@ export default defineCommand({
         const targets = pkgs.filter((p) => known.includes(p));
         if (unknown.length > 0 && targets.length === 0) process.exit(2);
         const isTTY = !!process.stdin.isTTY;
-        // the packages run CONCURRENTLY: Promise.all over the frozen
-        // opts (the ask hook is shared; each preserve call resolves its
-        // own prompt when the TTY allows it)
-        const results = await Promise.all(
-            targets.map((pkg) => preservePackage(pkg, opts, {
+        for (const pkg of targets) {
+            const result = await preservePackage(pkg, opts, {
                 ask: async () => {
                     if (!isTTY) return false; // default: keep
                     const ok = await confirm(
                         `preserve ${pkg}: restore your stored files over the deployed version? [y/N] `,
                     );
                     if (ok === "abort") {
-                        console.error("preserve: EOF (ctrl-d)");
-        console.error("preserve: stopped");
+                        console.error("preserve: EOF (ctrl-d) — stopped");
                         process.exit(130);
                     }
                     return ok === "yes";
                 },
-            }, DOTS_DIR)),
-        );
-        for (const result of results) {
+            }, DOTS_DIR);
             for (const l of result.lines) console.log(l);
+            if (result.code > worst) worst = result.code;
         }
-        const worstRest = results.reduce((w, r) => Math.max(w, r.code), 0);
-        process.exit(worstRest);
+        process.exit(worst);
     },
 });
 

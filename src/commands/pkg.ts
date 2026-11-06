@@ -16,7 +16,6 @@ import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
 import { checkDotsEnv, readRequires } from "../lib/dots";
 import { resolvePackage } from "../lib/deployScript";
-import { echoHelpList } from "../lib/lines";
 import {
     familyPkgManager, PKG_MANAGER_ID, PKG_OP,
     targetPkg, targetPkgInstalled,
@@ -28,15 +27,13 @@ type Op = "installed" | "search" | "install" | "remove";
 export default defineCommand({
     name: "pkg",
     description:
-        "Perform package manager operations on supported systems",
+        "Generic package operations on the given names (installed|search|install|remove) via the deploy target package manager",
     options: {
-        force: option(z.boolean().optional(), {
-            argumentKind: "flag" as const,
+        yes: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "no confirmations (non-interactive)",
             short: "y",
         }),
-        "dry-run": option(z.boolean().optional(), {
-            argumentKind: "flag" as const,
+        "dry-run": option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "print what would run",
         }),
     },
@@ -48,19 +45,8 @@ export default defineCommand({
         }
         const [op, ...names] = positional;
         const OPS: Op[] = ["installed", "search", "install", "remove"];
-        if (op === "help" && names.length === 0) {
-            echoHelpList("pkg", "on-deploy pkg <op> <name>... [--force|--dry-run]", [
-                "installed\tprobe the deploy state",
-                "search\tresolve the package providing the binary",
-                "install\tinstall via the deploy target manager",
-                "remove\tremove via the deploy target manager",
-            ]);
-            process.exit(0);
-        }
         if (!op || !OPS.includes(op as Op) || names.length === 0) {
-            console.error(`pkg: ${op ?? "(no op)"} is not a pkg op`);
-            console.error("pkg:\tusage\ton-deploy pkg <op> <name>...");
-            console.error("pkg:\thelp\ton-deploy pkg help");
+            console.error(`pkg: usage: on-deploy pkg <${OPS.join("|")}> <name>...`);
             process.exit(2);
         }
         const { target } = await readRequires();
@@ -72,36 +58,36 @@ export default defineCommand({
         for (const name of names) {
             if (op === "installed") {
                 const on = targetPkgInstalled({ pkgMgr, name });
-                console.log(`	${name}	${on ? "installed" : "MISSING"}`);
+                console.log(`  ${name.padEnd(20)} ${on ? "installed" : "MISSING"}`);
                 if (!on) failed += 1;
                 continue;
             }
             if (op === "search") {
                 const res = await resolvePackage(target, name);
-                if (res.ok) console.log(`	${name}	-> ${res.pkg}`);
+                if (res.ok) console.log(`  ${name.padEnd(20)} -> ${res.pkg}`);
                 else {
-                    console.log(`	${name}	UNRESOLVED`);
+                    console.log(`  ${name.padEnd(20)} UNRESOLVED`);
                     failed += 1;
                 }
                 continue;
             }
             // install | remove: skip already-satisfied state on install
             if (PKG_OP.install === op && targetPkgInstalled({ pkgMgr, name })) {
-                console.log(`	${name}	already installed`);
+                console.log(`  ${name.padEnd(20)} already installed`);
                 continue;
             }
-            console.log(`	${name}	${op}`);
+            console.log(`  ${name.padEnd(20)} ${op}`);
             const code = await targetPkg({
                 pkgMgr, op: op as PkgOpKind, names: [name], dry,
             });
             if (code !== 0) {
-                console.error(`	${name}	FAILED (exit ${code})`);
+                console.error(`  ${name.padEnd(20)} FAILED (exit ${code})`);
                 failed += 1;
                 continue;
             }
             if (op === "install" && !dry) {
                 const on = targetPkgInstalled({ pkgMgr, name });
-                console.log(`	${name}	${on ? "installed" : "STILL MISSING"}`);
+                console.log(`  ${name.padEnd(20)} ${on ? "installed" : "STILL MISSING"}`);
                 if (!on) failed += 1;
             }
         }

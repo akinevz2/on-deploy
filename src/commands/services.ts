@@ -8,7 +8,7 @@
 //   on-deploy services restart    restart each unit
 //   on-deploy services status     is-active per unit
 //
-// Non-interactive runs REQUIRE --force (start/stop/restart confirm on a
+// Non-interactive runs REQUIRE --yes (start/stop/restart confirm on a
 // tty; nothing hangs on stdin). NO package knowledge: the unit list
 // comes entirely from services.required (the runner lives in
 // lib/services.ts, shared with the `deploy` menu).
@@ -20,18 +20,15 @@ import {
     readServiceOrder, unitify, runServicesAction, SERVICES_ACTIONS,
     type ServicesAction,
 } from "../lib/services";
-import { echoHelpList } from "../lib/lines";
 
 export default defineCommand({
     name: "services",
     description:
-        "Control the services.required units over systemd:"
-        + " check, start, stop, restart, status",
+        "Run services.required units: check|start|stop|restart|status (systemd --user, --no-block, stow-safe disable)",
     options: {
-        force: option(z.boolean().optional(), {
-            argumentKind: "flag" as const,
-            description: "no confirmation, non-interactive runs",
-            short: "f",
+        yes: option(z.boolean().optional(), { argumentKind: "flag" as const,
+            description: "no confirmation (non-interactive)",
+            short: "y",
         }),
     },
     handler: async ({ flags, positional }) => {
@@ -40,38 +37,25 @@ export default defineCommand({
             console.error(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
-        const raw = positional[0] ?? "";
-        const action = raw === "help" ? raw : (raw as ServicesAction);
-        if (raw === "help") {
-            echoHelpList("services", "on-deploy services <action> [--force]", [
-                "check\treload + enable --now, no-op when active",
-                "start\treset-failed then start each unit",
-                "stop\tcancel jobs, drop the wants links, stop",
-                "restart\trestart each unit in the order",
-                "status\tis-active per unit",
-            ]);
-            process.exit(0);
-        }
+        const action = (positional[0] ?? "") as ServicesAction;
         if (!SERVICES_ACTIONS.includes(action)) {
-            console.error(`services: ${action ?? "(no action)"} is not a services action`);
-            console.error("services:	usage	on-deploy services <action>");
-            console.error("services:	help	on-deploy services help");
+            console.error(`services: usage: on-deploy services <${SERVICES_ACTIONS.join("|")}> [--yes]`);
             process.exit(2);
         }
         const order = readServiceOrder();
         if (order.length === 0) {
-            console.error("services: services.required is empty or missing");
+            console.error("services: empty or missing services.required");
             process.exit(2);
         }
         const units = unitify(order);
-        const force = !!flags.force;
+        const yes = !!flags.yes;
 
         // confirm on interactive terminals for start/stop/restart — the
-        // Makefile may need to run these non-interactively, so --force
-        // bypasses; non-tty without --force aborts (nothing hangs)
-        if ((action === "start" || action === "stop" || action === "restart") && !force) {
+        // Makefile may need to run these non-interactively, so --yes
+        // bypasses; non-tty without --yes aborts (nothing hangs)
+        if ((action === "start" || action === "stop" || action === "restart") && !yes) {
             if (!process.stdin.isTTY) {
-                console.error("services: aborting, non-interactive without --force");
+                console.error("services: non-interactive without --yes — aborting");
                 process.exit(1);
             }
             console.log(`services: ${units.join(" ")}`);

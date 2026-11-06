@@ -32,7 +32,7 @@
 //     fail-fasts with the spec's `missing` note when it fails.
 //   - run() returns the process exit code; dry-run must print and return 0.
 //   - interactive confirmations belong to the caller (the managed verb
-//     carries the --force / tty gate); specs run sudo the way provisioners
+//     carries the --yes / tty gate); specs run sudo the way provisioners
 //     .ts does when they need it.
 //   - no spec ever hardcodes a dots package name: names come from the
 //     caller exactly like the pkg verb.
@@ -127,7 +127,6 @@ const systemSpec = (id: PkgManagerId, families: TargetFamily[]): PkgManagerSpec 
     installed: (name) => targetPkgInstalled({ pkgMgr: id, name }),
     run: async (req) => await targetPkg({ ...req, pkgMgr: id }),
     resolve: async (target, name) => {
-        if (!target) return null;
         const res = await resolvePackage(target, name);
         return res.ok && res.pkg ? res.pkg : null;
     },
@@ -151,7 +150,7 @@ const REGISTRY_ARGV: Record<RegistryId, Record<PkgOpKind, string[]>> = {
 function registryRun(cmd: RegistryId, req: TransportRequest): Promise<number> {
     const argv = REGISTRY_ARGV[cmd][req.op];
     if (req.dry) {
-        console.log(`	[dry-run] ${argv.join(" ")} ${req.names.join(" ")}`);
+        console.log(`    [dry-run] ${argv.join(" ")} ${req.names.join(" ")}`);
         return Promise.resolve(0);
     }
     const p = Bun.spawnSync([...argv, ...req.names], { stdout: "inherit", stderr: "inherit" });

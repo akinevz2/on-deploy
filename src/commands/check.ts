@@ -70,7 +70,7 @@ export default defineCommand({
                     : r.problem
                         ? `MISSING (${r.problem})`
                         : `MISSING -> ${r.pkg}`;
-                console.log(`	${r.binary.padEnd(20)} ${state}`);
+                console.log(`  ${r.binary.padEnd(20)} ${state}`);
             }
         }
         process.exit(rows.some((r) => !r.installed) ? 1 : 0);

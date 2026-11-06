@@ -39,7 +39,6 @@ import {
     registryTransportInstalled,
     type PkgDescriptor,
 } from "../lib/adapters";
-import { echoHelpList, echoOrdered } from "../lib/lines";
 import { pkgMakefile, stowPkg, swapArtifact, unstowPkg } from "../lib/pkgops";
 import { lookupTransport } from "../lib/pkgmanagers";
 import { readRequires } from "../lib/dots";
@@ -94,10 +93,10 @@ async function runPkg(desc: PkgDescriptor, family: string | null, args: MethodAr
     }
     const lines: string[] = [];
     if (!args.force && t.spec.installed(t.installable)) {
-        lines.push(`	${desc.pkg} installed already (${t.id}: ${t.installable})`);
+        lines.push(`  ${desc.pkg.padEnd(11)} installed already (${t.id}: ${t.installable})`);
         return { ok: true, lines };
     }
-    lines.push(`	${desc.pkg} install (${t.id}${t.installable !== desc.installName ? ` via ${t.installable}` : ""})`);
+    lines.push(`  ${desc.pkg.padEnd(11)} install (${t.id}${t.installable !== desc.installName ? ` via ${t.installable}` : ""})`);
     return { ok: (await t.spec.run({ op: PKG_OP.install, names: [t.installable], dry: args.dry })) === 0, lines };
 }
 
@@ -112,7 +111,7 @@ function resolveMethod(desc: PkgDescriptor, args: MethodArgs): string {
 
 function dryGuard(dry: boolean, what: string): boolean {
     if (!dry) return false;
-    console.log(`	[dry-run] ${what}`);
+    console.log(`  [dry-run] ${what}`);
     return true;
 }
 
@@ -132,52 +131,38 @@ interface MakeResult { ok: boolean; lines: string[] }
 export default defineCommand({
     name: "managed",
     description:
-        "Route managed dots package operations to deploy-support implementation Makefile",
+        "Package-managed deploy router per dots package (consults the adapter; resolves method > conf > default; routes; see also 'on-deploy supports')",
     options: {
         method: option(z.string().optional(), {
-            description: "Override the doftiles.conf record (PACKAGE=source|pkg)",
+            description: "explicit method; overrides the doftiles.conf record (knob <PKG>=<method>)",
         }),
         value: option(z.string().optional(), {
-            description: "Write the conf-set record value",
+            description: "the value written by conf-set",
         }),
         force: option(z.string().optional(), { argumentKind: "flag" as const,
-            description: "Redeploy even when deployed already (--force=1)",
+            description: "rebuild/redeploy even when deployed already (--force=1)",
         }),
         "dry-run": option(z.string().optional(), { argumentKind: "flag" as const,
-            description: "Print what would run (--dry-run=1)",
+            description: "print what would run (--dry-run=1)",
         }),
     },
     handler: async ({ flags, positional }) => {
         const [pkg, op, ...extra] = positional ?? [];
-        if (op === "help") {
-            echoHelpList("managed", "on-deploy managed <pkg> <op> [--method|--force|--dry-run]", [
-                "install	route PACKAGE=source|pkg",
-                "uninstall	adapter uninstall + unstow + record reset",
-                "status	deploy state: artifact + checkout + record",
-                "conf-get	print the doftiles.conf record",
-                "conf-set	write the record (--value V)",
-                "metadata	the metadata items, one line",
-                "toolchain, build, link	passthrough make targets",
-                "trust-local, trust-global	passthrough make targets",
-            ]);
-            process.exit(0);
-        }
         if (!pkg || !op || extra.length > 0) {
-            console.error(`managed: ${op ?? "(no op)"} is not a managed op`);
-            console.error("managed:	usage	on-deploy managed <pkg> <op>");
-            console.error("managed:	help	on-deploy managed <pkg> help");
+            console.error("managed: usage: on-deploy managed <pkg> <op> [--method M] [--value V] [--force=1] [--dry-run=1]");
+            console.error("op: install | uninstall | status | conf-get | conf-set | metadata | <metadata field>");
+            console.error("    or a make target passthrough (toolchain, build, link, install-source, ...)");
             process.exit(2);
         }
         const { target } = await readRequires();
         const family: string | null = target ?? null;
         if (!pkgMakefile(pkg)) {
-            console.error(`managed: ${pkg}: no adapter`);
-            console.error(`managed:\tabsent\tdots/${pkg}/.local/state/depends/${pkg}.Makefile`);
+            console.error(`managed: ${pkg}: no adapter (dots/${pkg}/.local/state/depends/${pkg}.Makefile)`);
             process.exit(2);
         }
         const consultDesc = consult(pkg);
         if (!consultDesc.ok) {
-            echoOrdered([`managed: ${consultDesc.problem}`, `managed: the adapter consult failed for ${pkg}`]);
+            console.error(`managed: ${pkg}: ${consultDesc.problem}`);
             process.exit(2);
         }
         const desc: PkgDescriptor = consultDesc;
@@ -211,12 +196,12 @@ export default defineCommand({
         };
 
         if (COMMON_NOOPS.has(op)) {
-            console.log(`	${desc.pkg} nothing to ${op}`);
+            console.log(`  ${desc.pkg.padEnd(11)} nothing to ${op}`);
             return;
         }
 
         if (op === "conf-get") {
-            console.log(`	${desc.pkg} ${desc.key}=${confGet(desc.key)}`);
+            console.log(`  ${desc.pkg.padEnd(11)} ${desc.key}=${confGet(desc.key)}`);
             return;
         }
         if (op === "conf-set") {
@@ -226,7 +211,7 @@ export default defineCommand({
             }
             if (dryGuard(args.dry, `conf-set ${desc.key}=${args.value}`)) return;
             confSet(desc.key, args.value);
-            console.log(`	${desc.pkg} ${desc.key}=${args.value}`);
+            console.log(`  ${desc.pkg.padEnd(11)} ${desc.key}=${args.value}`);
             return;
         }
 
@@ -242,9 +227,9 @@ export default defineCommand({
             }
             const art = desc.artifact ? existsSync(join(process.env.HOME!, "dots", desc.artifact)) : false;
             const subOk = desc.subDir ? existsSync(join(process.env.HOME!, "dots", desc.subDir)) : true;
-            console.log(`	${desc.pkg} ${registryOk ? "installed" : deployedState(desc)}`);
-            console.log(`	artifact=${art ? "linked" : "none"}`);
-            console.log(`	checkout=${subOk ? "present" : "missing"} method=${confGet(desc.key) || "(unset)"}`);
+            console.log(`  ${desc.pkg.padEnd(11)} ${registryOk ? "installed" : deployedState(desc)}`);
+            console.log(`  ${"".padEnd(11)} artifact=${art ? "linked" : "none"}`);
+            console.log(`  ${"".padEnd(11)} checkout=${subOk ? "present" : "missing"} method=${confGet(desc.key) || "(unset)"}`);
             return;
         }
 
@@ -264,7 +249,7 @@ export default defineCommand({
             if (!r.ok) process.exit(1);
             unstowPkg(desc.pkg);
             confSet(desc.key, "none");
-            console.log(`	${desc.pkg} uninstalled`);
+            console.log(`  ${desc.pkg.padEnd(11)} uninstalled`);
             return;
         }
 
@@ -275,7 +260,7 @@ export default defineCommand({
                 console.error(`managed: ${desc.pkg}: unknown method '${resolved}' (methods_supported: ${desc.methods.join(" ")})`);
                 process.exit(2);
             }
-            console.log(`	${desc.pkg} install (method=${resolved})`);
+            console.log(`  ${desc.pkg.padEnd(11)} install (method=${resolved})`);
             if (resolved === "pkg") {
                 const r = await runPkg(desc, family, args);
                 for (const line of r.lines) console.log(line);

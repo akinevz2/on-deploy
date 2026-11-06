@@ -10,7 +10,7 @@ import { pkgOpTui } from "./tuiRunner";
 
 export default defineCommand({
     name: "enable",
-    description: "Enable the units of supported dots packages",
+    description: "Enable packages (TUI or explicit list) — enable",
     options: {
         only: option(z.string().optional(), {
             description: "comma/space-separated packages (skips the TUI)",

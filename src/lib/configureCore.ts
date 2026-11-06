@@ -42,9 +42,7 @@ export async function runApply(opts: { dryRun?: boolean } = {}): Promise<number>
     for (const step of targetSteps(tgt, !!opts.dryRun)) {
         const s = await step.run();
         const mark = s.ok ? "ok" : "FAILED";
-        console.log(`	${step.name}	${mark}`);
-        console.log(`	${step.name}	${s.detail}`);
-        if (s.problem) console.log(`	${step.name}	${s.problem}`);
+        console.log(`  ${step.name.padEnd(12)} ${mark} — ${s.detail}${s.problem ? ` (${s.problem})` : ""}`);
         if (!s.ok) failed += 1;
     }
     return failed;

@@ -41,8 +41,6 @@ import dependsCommand from "./commands/depends";
 import detectServerCommand from "./commands/detect-server";
 import managedCommand from "./commands/managed";
 import supportsCommand from "./commands/supports";
-import { helpRenderer } from "./lib/helpRenderer";
-type HelpRendererCtxLike = Parameters<typeof helpRenderer>[0];
 
 const argv = process.argv.slice(2);
 if (argv.length === 0) {
@@ -76,10 +74,7 @@ const cli = await createCLI({
     name: "on-deploy",
     version: "1.2.0",
     description:
-        "Deploy the dotfiles: purpose built for the\ngithub.com/akinevz2/doftiles project",
-    // the 35-column help renderer (the descriptions wrap; the rules
-    // stay readable)
-    help: { renderer: (ctx: unknown) => helpRenderer(ctx as HelpRendererCtxLike) },
+        "Rigorous dotfiles requirement deployer: verify system.required binaries, install the missing ones via the platform deploy script.",
 });
 
 cli.command(installCommand);

@@ -12,11 +12,10 @@ import { DOTS_DIR } from "./dots";
 
 export const SERVICE_ORDER_FILE = join(DOTS_DIR, "services.required");
 
-export type ServicesAction =
-    | "check" | "start" | "stop" | "restart" | "status" | "help";
+export type ServicesAction = "check" | "start" | "stop" | "restart" | "status";
 
 export const SERVICES_ACTIONS: ServicesAction[] = [
-    "check", "start", "stop", "restart", "status", "help",
+    "check", "start", "stop", "restart", "status",
 ];
 
 function shOut(cmd: string): { code: number; out: string } {
@@ -49,7 +48,7 @@ export function runServicesAction(action: ServicesAction, units: string[]): numb
         failed += run("systemctl --user daemon-reload");
         for (const unit of units) {
             const code = run(`systemctl --user enable --now --no-block ${unit}`);
-            if (code !== 0) console.error(`services: failed to enable, ${unit}`);
+            if (code !== 0) console.error(`services: failed to enable ${unit}`);
             failed += Math.min(code, 1);
         }
         console.log(`services: enabled: ${units.join(" ")}`);
@@ -87,7 +86,7 @@ export function runServicesAction(action: ServicesAction, units: string[]): numb
     console.log(`services: ${action} submitted; current state:`);
     for (const unit of units) {
         const st = shOut(`systemctl --user is-active ${unit} 2>/dev/null`).out || "unknown";
-        console.log(`	${unit.padEnd(28)} ${st}`);
+        console.log(`  ${unit.padEnd(28)} ${st}`);
     }
     return failed;
 }
