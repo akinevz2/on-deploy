@@ -29,6 +29,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { pkgMakefile } from "./pkgops";
 import { TRANSPORTS, type PkgManagerSpec } from "./pkgmanagers";
 
 export const DOTS = join(process.env.HOME!, "dots");
@@ -169,13 +170,14 @@ export function consult(pkg: string): PkgDescriptor {
     const raw: Record<string, string> = {};
     let ok = true;
     let problem: string | undefined;
-    if (!hasMakefile(pkg)) problem = "no adapter (dots/<pkg>/.local/state/depends/<pkg>.Makefile)";
+    const host = pkgMakefile(pkg);
+    if (!host) problem = `no adapter for ${pkg}`;
     if (problem) ok = false;
 
     if (ok) {
         const r = Bun.spawnSync([
-            "make", "-C", join(DOTS, pkg), "--no-print-directory",
-            "-f", `.local/state/depends/${pkg}.Makefile`, "metadata",
+            "make", "-C", host!.dir, "--no-print-directory",
+            "-f", host!.file, "metadata",
         ], { stdout: "pipe", stderr: "pipe" });
         const out = `${r.stdout ?? ""}`;
         if ((r.exitCode ?? 1) !== 0) {
@@ -191,13 +193,16 @@ export function consult(pkg: string): PkgDescriptor {
         }
     }
 
-    const repoPkgName = safeReposPkgName(raw, pkg);
-    const pkgName = safePkgName(raw, pkg);
-    const subDir = safeSubDir(pkg, pkgName);
-    const artifact = subDir ? safeArtifact(pkg, repoPkgName) : undefined;
+    // the anchor DOTS package: the invocation name (doftiles) maps to
+    // the HOST package through the adapter (depends)
+    const anchorPkg = host?.pkg ?? pkg;
+    const repoPkgName = safeReposPkgName(raw, anchorPkg);
+    const pkgName = safePkgName(raw, anchorPkg);
+    const subDir = safeSubDir(anchorPkg, pkgName);
+    const artifact = safeArtifact(anchorPkg, repoPkgName);
     return {
-        pkg,
-        key: safeKeyName(pkg),
+        pkg: anchorPkg,
+        key: safeKeyName(anchorPkg),
         repoUrl: safeRepoUrl(raw),
         pkgName,
         subDir,

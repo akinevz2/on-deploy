@@ -34,15 +34,15 @@ export function stowPackages(): string[] {
  * Returns { dir, file } where dir is the `make -C` cwd and file the
  * repo-relative makefile to run.
  */
-export function pkgMakefile(pkg: string): { dir: string; file: string } | null {
+export function pkgMakefile(pkg: string): { dir: string; file: string; pkg: string } | null {
     const dir = join(DOTS, pkg);
     const stateFile = join(dir, ".local", "state", "depends", `${pkg}.Makefile`);
     if (existsSync(stateFile)) {
-        return { dir, file: join(".local", "state", "depends", `${pkg}.Makefile`) };
+        return { dir, file: join(".local", "state", "depends", `${pkg}.Makefile`), pkg };
     }
     const shareDir = join(dir, ".local", "share", pkg);
     if (existsSync(join(shareDir, "Makefile"))) {
-        return { dir: shareDir, file: "Makefile" };
+        return { dir: shareDir, file: "Makefile", pkg };
     }
     return null;
 }
@@ -51,9 +51,8 @@ export function hasMakefile(pkg: string): boolean {
     return pkgMakefile(pkg) !== null;
 }
 
-/** the depends-scheme Makefile of a package (the per-submodule
- *  sync/build/link/install recipes on-deploy `depends` drives) —
- *  dots/<pkg>/.local/state/depends/<pkg>.Makefile, or null */
+/** the depends-scheme Makefile of a package — the same-name
+ *  dots/<pkg>/.local/state/depends/<pkg>.Makefile; full path or null */
 export function depsMakefile(pkg: string): string | null {
     const file = join(DOTS, pkg, ".local", "state", "depends", `${pkg}.Makefile`);
     return existsSync(file) ? file : null;
