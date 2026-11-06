@@ -7,6 +7,7 @@
 // are cancelled first so stop never waits on a stuck start job.
 
 import { spawnSync } from "node:child_process";
+import { say } from "../lib/lines";
 import { join } from "node:path";
 import { DOTS_DIR } from "./dots";
 
@@ -48,7 +49,7 @@ export function runServicesAction(action: ServicesAction, units: string[]): numb
         failed += run("systemctl --user daemon-reload");
         for (const unit of units) {
             const code = run(`systemctl --user enable --now --no-block ${unit}`);
-            if (code !== 0) console.error(`services: failed to enable ${unit}`);
+            if (code !== 0) say(`services: failed to enable ${unit}`);
             failed += Math.min(code, 1);
         }
         console.log(`services: enabled: ${units.join(" ")}`);

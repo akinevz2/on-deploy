@@ -20,7 +20,7 @@ import {
     readServiceOrder, unitify, runServicesAction, SERVICES_ACTIONS,
     type ServicesAction,
 } from "../lib/services";
-import { echoHelpList } from "../lib/lines";
+import { echoHelpList, say } from "../lib/lines";
 
 export default defineCommand({
     name: "services",
@@ -35,7 +35,7 @@ export default defineCommand({
     handler: async ({ flags, positional }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
-            console.error(`on-deploy: ${env.problem}`);
+            say(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
         const raw = positional[0] ?? "";
@@ -51,14 +51,14 @@ export default defineCommand({
         }
         const action = raw as ServicesAction;
         if (!SERVICES_ACTIONS.includes(action)) {
-            console.error(`services: ${raw || "(no action)"} is not a services action`);
-            console.error("services:\tusage\ton-deploy services <action> [--yes]");
-            console.error("services:\thelp\ton-deploy services help");
+            say(`services: ${raw || "(no action)"} is not a services action`);
+            say("services:\tusage\ton-deploy services <action> [--yes]");
+            say("services:\thelp\ton-deploy services help");
             process.exit(2);
         }
         const order = readServiceOrder();
         if (order.length === 0) {
-            console.error("services: empty or missing services.required");
+            say("services: empty or missing services.required");
             process.exit(2);
         }
         const units = unitify(order);
@@ -69,7 +69,7 @@ export default defineCommand({
         // bypasses; non-tty without --yes aborts (nothing hangs)
         if ((action === "start" || action === "stop" || action === "restart") && !yes) {
             if (!process.stdin.isTTY) {
-                console.error("services: non-interactive without --yes — aborting");
+                say("services: non-interactive without --yes — aborting");
                 process.exit(1);
             }
             console.log(`services: ${units.join(" ")}`);

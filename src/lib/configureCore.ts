@@ -8,20 +8,21 @@
 // into `configure` — configuring now APPLIES itself.)
 
 import { checkDotsEnv, readRequires } from "./dots";
+import { say } from "../lib/lines";
 import { resolveTarget, targetSteps } from "./targets";
 
 /** returns the number of FAILED steps */
 export async function runApply(opts: { dryRun?: boolean } = {}): Promise<number> {
     const env = checkDotsEnv();
     if (!env.ok) {
-        console.error(`on-deploy: ${env.problem}`);
+        say(`on-deploy: ${env.problem}`);
         return 1;
     }
     let requires;
     try {
         requires = await readRequires();
     } catch (err) {
-        console.error(`configure: ${(err as Error).message}`);
+        say(`configure: ${(err as Error).message}`);
         return 1;
     }
 
@@ -29,7 +30,7 @@ export async function runApply(opts: { dryRun?: boolean } = {}): Promise<number>
     try {
         tgt = resolveTarget(requires.target, requires.session);
     } catch (err) {
-        console.error(`configure: ${(err as Error).message}`);
+        say(`configure: ${(err as Error).message}`);
         return 1;
     }
     console.log(

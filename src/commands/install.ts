@@ -12,7 +12,7 @@ import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
 import { checkDotsEnv, readRequires, missing } from "../lib/dots";
 import { resolvePackage, runInstall, installed } from "../lib/deployScript";
-import { confirm } from "../lib/lines";
+import { confirm , say } from "../lib/lines";
 
 const isInteractive = (): boolean => process.stdin.isTTY === true;
 
@@ -24,7 +24,7 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
     // fail fast instead of hanging: a non-interactive run without --yes
     // can never answer the per-binary confirmations
     if (!dryRun && !yes && !isInteractive() && missing(requires.binaries).length > 0) {
-        console.error(
+        say(
             "deploy: non-interactive terminal without --yes — " +
             "the confirmation prompts would hang. Re-run with --yes " +
             "(or interactively).",
@@ -41,8 +41,8 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
         }
         const res = await resolvePackage(target, binary);
         if (!res.ok) {
-            console.error(`  ${binary.padEnd(20)} UNRESOLVED`);
-            console.error(`  ${" ".repeat(20)} ${res.problem ?? ""}`);
+            say(`  ${binary.padEnd(20)} UNRESOLVED`);
+            say(`  ${" ".repeat(20)} ${res.problem ?? ""}`);
             failed += 1;
             continue;
         }
@@ -52,18 +52,18 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
         if (!yes) {
             const ok = await confirm(`         install ${res.pkg}? [Y/n] `);
             if (ok === "abort") {
-                console.error(`         EOF (ctrl-d): stopped — ${binary} unresolved`);
+                say(`         EOF (ctrl-d): stopped — ${binary} unresolved`);
                 process.exit(130);
             }
             if (ok === "no") {
-                console.error(`         skipped — ${binary} stays missing`);
+                say(`         skipped — ${binary} stays missing`);
                 failed += 1;
                 continue;
             }
         }
         const inst = await runInstall(target, binary);
         if (!inst.ok) {
-            console.error(`         FAILED: ${inst.problem ?? inst.command}`);
+            say(`         FAILED: ${inst.problem ?? inst.command}`);
             failed += 1;
             continue;
         }
@@ -71,8 +71,8 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
         if (installed(binary)) {
             console.log(`         installed: ${inst.command}`);
         } else {
-            console.error(`         FAILED: ${binary} still absent`);
-            console.error(`         ran: ${inst.command}`);
+            say(`         FAILED: ${binary} still absent`);
+            say(`         ran: ${inst.command}`);
             failed += 1;
         }
     }
@@ -82,7 +82,8 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
 export default defineCommand({
     name: "install",
     description:
-        "Install missing required binaries from the target repositories (search + install + re-verify)",
+        "Install the missing wm.required binaries (per-distro resolver).\n" +
+        "\t--yes non-interactive, --dry-run preview, --only subset.",
     options: {
         yes: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "install without confirmation (non-interactive)",
@@ -98,7 +99,7 @@ export default defineCommand({
     handler: async ({ flags }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
-            console.error(`on-deploy: ${env.problem}`);
+            say(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
         const failed = await walk(
@@ -106,7 +107,7 @@ export default defineCommand({
             flags.only?.split(/[,\s]+/).filter(Boolean),
         );
         if (failed > 0) {
-            console.error(`install: ${failed} requirement(s) unresolved`);
+            say(`install: ${failed} requirement(s) unresolved`);
             process.exit(1);
         }
         console.log("install: all requirements satisfied");

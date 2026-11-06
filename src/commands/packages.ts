@@ -21,7 +21,7 @@ import { join } from "node:path";
 import {
     checkDotsEnv, DOTS_DIR, readWmPackages,
 } from "../lib/dots";
-import { echoHelpList } from "../lib/lines";
+import { echoHelpList , say } from "../lib/lines";
 import { printResults, pkgMakefile, runMakeSpun, type PkgResult } from "../lib/pkgops";
 import { releaseTui, tuiChecklist, tuiSelect } from "../lib/tui";
 
@@ -50,11 +50,12 @@ export function packagesWithMakefiles(dots: string): string[] {
 export default defineCommand({
     name: "packages",
     description:
-        "Group operations on the stow packages' dependency Makefiles (install/start/stop/uninstall/status/disable/enable); bare = TUI",
+        "Group ops over the dependency Makefiles (install|start|stop|uninstall|status|disable|enable).\n" +
+        "\tbare = the TUI; the walk is scoped to stows.required.",
     handler: async ({ positional }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
-            console.error(`on-deploy: ${env.problem}`);
+            say(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
         const [rule, ...rest] = positional;

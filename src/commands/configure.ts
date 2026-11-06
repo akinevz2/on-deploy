@@ -21,7 +21,7 @@ import {
     chmodSync, realpathSync,
 } from "node:fs";
 import { checkDotsEnv, DOTS_DIR, readRequires, readWmPackages } from "../lib/dots";
-import { readLine } from "../lib/lines";
+import { readLine, say } from "../lib/lines";
 import { runApply } from "../lib/configureCore";
 import { walk } from "./install";
 import {
@@ -413,7 +413,8 @@ async function tuiEdit(m: Manifest): Promise<EditResult> {
 export default defineCommand({
     name: "configure",
     description:
-        "Configure the deployment: target + binaries (wm.required), deployment model + services (deploy.profile), git credentials (dots/shell/.my-credentials)",
+        "Configure the deployment manifests (all four) + git identity.\n" +
+        "\tflags edit directly; the TUI wizard deploys on save (skipped when chained).",
     options: {
         target: option(z.string().optional(), {
             description: "set the deploy target directly",
@@ -455,7 +456,7 @@ export default defineCommand({
     handler: async ({ flags }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
-            console.error(`on-deploy: ${env.problem}`);
+            say(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
         const m = readManifest();
@@ -492,7 +493,7 @@ export default defineCommand({
         }
         if (flags.session) {
             if (!SESSIONS.includes(flags.session)) {
-                console.error(`configure: unknown session '${flags.session}' (${SESSIONS.join("|")})`);
+                say(`configure: unknown session '${flags.session}' (${SESSIONS.join("|")})`);
                 process.exit(2);
             }
             writeSession(flags.session);
@@ -520,12 +521,12 @@ export default defineCommand({
                 const pkg = spec.split(":", 1)[0];
                 let path = spec.slice(pkg.length + 1);
                 if (!path) {
-                    console.error(`configure: add-subs needs pkg:path — '${spec}' has no path`);
+                    say(`configure: add-subs needs pkg:path — '${spec}' has no path`);
                     process.exit(2);
                 }
                 path = path.replace(/^dots\//, "");
                 if (!existsSync(join(DOTS_DIR, path))) {
-                    console.error(`configure: submodule path '${path}' does not exist in the dots checkout`);
+                    say(`configure: submodule path '${path}' does not exist in the dots checkout`);
                     process.exit(2);
                 }
                 const existing = s.entries.find((e) => e.pkg === pkg);
@@ -543,7 +544,7 @@ export default defineCommand({
             const e = flags.email ?? cred.email;
             const err = validCredentials(n, e);
             if (err) {
-                console.error(`configure: ${err}`);
+                say(`configure: ${err}`);
                 process.exit(2);
             }
             credNotes = writeCredentials(n, e);
@@ -593,7 +594,7 @@ export default defineCommand({
                     console.log("wizard: binaries");
                     const failed = await walk(false, false);
                     if (failed > 0) {
-                        console.error(`wizard: ${failed} binary/b missing`);
+                        say(`wizard: ${failed} binary/b missing`);
                         process.exit(1);
                     }
                     if (process.env.ONDEPLOY_INSTALL_CHAIN === "1") {
@@ -636,7 +637,7 @@ export default defineCommand({
                     console.log("wizard: apply");
                     const applyFailed = await runApply({});
                     if (applyFailed > 0) {
-                        console.error(`wizard: apply FAILED (${applyFailed})`);
+                        say(`wizard: apply FAILED (${applyFailed})`);
                         process.exit(1);
                     }
                     console.log("wizard: complete");
@@ -650,7 +651,7 @@ export default defineCommand({
             process.env.HOME!, ".local/bin/install", `${m.target}.deploy`,
         );
         if (!existsSync(script)) {
-            console.error(
+            say(
                 `configure: WARNING — no deploy script for '${m.target}': ${script} missing`,
             );
         }
@@ -664,7 +665,7 @@ export default defineCommand({
         // lib/configureCore.ts). `--dry-run` prints without running.
         const failed = await runApply({ dryRun: !!flags["dry-run"] });
         if (failed > 0) {
-            console.error(`configure: ${failed} apply step(s) failed`);
+            say(`configure: ${failed} apply step(s) failed`);
             process.exit(1);
         }
         console.log("configure: saved + applied");

@@ -1,6 +1,7 @@
 // src/commands/check.ts — report requirement state, install nothing.
 
 import { defineCommand, option } from "@bunli/core";
+import { say } from "../lib/lines";
 import { z } from "zod";
 import { checkDotsEnv, readRequires, missing, DOTS_DIR } from "../lib/dots";
 import { resolvePackage, scriptPath } from "../lib/deployScript";
@@ -49,14 +50,16 @@ export async function collect(): Promise<{ rows: CheckRow[]; target: string }> {
 
 export default defineCommand({
     name: "check",
-    description: "Verify environment + requirements; install nothing",
+    description: "Verify the environment + requirements (nothing installs)..\n" +
+         +
+	"\t--json for the machine adapter.",
     options: {
         json: option(z.boolean().optional(), { argumentKind: "flag" as const, description: "machine-readable output" }),
     },
     handler: async ({ flags }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
-            console.error(`on-deploy: ${env.problem}`);
+            say(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
         const { rows, target } = await collect();

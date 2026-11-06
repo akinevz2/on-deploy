@@ -27,7 +27,7 @@ import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
 import { readRequires } from "../lib/dots";
 import { resolvePackage, runInstall, scriptExists, installed } from "../lib/deployScript";
-import { confirm, echoHelpList } from "../lib/lines";
+import { confirm, echoHelpList , say } from "../lib/lines";
 
 interface Toolchain {
     /** the single binary that identifies the toolchain */
@@ -71,7 +71,7 @@ async function platformInstall(
             return `(<dry-run>)`;
         }
         if (!yes && !isInteractive()) {
-            console.error(
+            say(
                 `toolchain: non-interactive terminal without --yes — ` +
                 `the install of '${pkg}' may prompt (sudo). Re-run with --yes (or interactively).`,
             );
@@ -80,7 +80,7 @@ async function platformInstall(
         if (!yes) {
             const ok = await confirm(`         install ${toolchain.probe} via ${res.pkg}? [Y/n] `);
             if (ok === "abort") {
-                console.error("         EOF (ctrl-d): stopped");
+                say("         EOF (ctrl-d): stopped");
                 process.exit(130);
             }
             if (ok === "no") return "";
@@ -103,7 +103,7 @@ async function rustupPost(
         return 0;
     }
     if (!yes && !isInteractive()) {
-        console.error(
+        say(
             `toolchain: rustup present but ${absent.join("/")} absent, and the fix ` +
             `(\`${toolchain.postFix}\`) downloads a toolchain — run it manually or re-run with --yes.`,
         );
@@ -112,11 +112,11 @@ async function rustupPost(
     if (!yes) {
         const ok = await confirm(`         ${toolchain.postFix}\n         proceed? [Y/n] `);
         if (ok === "abort") {
-            console.error("         EOF (ctrl-d): stopped");
+            say("         EOF (ctrl-d): stopped");
             process.exit(130);
         }
         if (ok === "no") {
-            console.error(`         skipped — ${absent.join(", ")} stay missing`);
+            say(`         skipped — ${absent.join(", ")} stay missing`);
             return 1;
         }
     }
@@ -125,7 +125,7 @@ async function rustupPost(
     });
     const exit = await run.exited;
     if (exit !== 0 || !installed("cargo")) {
-        console.error(`         FAILED: no usable rust toolchain (rustup default stable exited ${exit})`);
+        say(`         FAILED: no usable rust toolchain (rustup default stable exited ${exit})`);
         return 1;
     }
     return 0;
@@ -143,7 +143,7 @@ async function ensure(
         const missing = toolchain.post.filter((b) => !installed(b));
         if (missing.length === 0) return;
         if (check) {
-            console.error(`toolchain missing: ${key} — ${toolchain.probe} present but ` +
+            say(`toolchain missing: ${key} — ${toolchain.probe} present but ` +
                 `${missing.join("/")} absent; run \`${toolchain.postFix}\` first`);
             process.exit(2);
         }
@@ -152,7 +152,7 @@ async function ensure(
 
     // b) absent: --check is the fail-fast contract
     if (check) {
-        console.error(`toolchain missing: ${key} — install it via \`on-deploy toolchain --${key}\``);
+        say(`toolchain missing: ${key} — install it via \`on-deploy toolchain --${key}\``);
         process.exit(2);
     }
 
@@ -179,11 +179,11 @@ async function ensure(
                 console.log("  bun          installed (npm install --global bun)");
                 return;
             }
-            console.error(`  bun          FAILED (npm exited ${exit})`);
+            say(`  bun          FAILED (npm exited ${exit})`);
         }
     }
 
-    console.error(`toolchain missing: ${key} — ` +
+    say(`toolchain missing: ${key} — ` +
         (scriptExists(target)
             ? "the platform install did not provide it (resolution failed or declined)"
             : `no <target>.deploy script for '${target}' — install ${toolchain.probe} manually`
@@ -194,7 +194,8 @@ async function ensure(
 export default defineCommand({
     name: "toolchain",
     description:
-        "Install the language toolchains for the adapters (--bun or --rustup; --check verifies)",
+        "The language toolchains for the adapters.\n" +
+        "\t--bun|--rustup install; --check verify-only; --dry-run preview.",
     options: {
         bun: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "ensure the bun toolchain (bunli/bun builds)",
@@ -229,9 +230,9 @@ export default defineCommand({
         }
         const keys = Object.keys(TOOLCHAINS).filter((k) => f[k]);
         if (keys.length !== 1) {
-            console.error(`toolchain: the key ${keys[0] || "(none)"} is not a supported toolchain`);
-            console.error("toolchain:\tusage\ton-deploy toolchain <key> [--check|--dry-run|--yes]");
-            console.error("toolchain:\thelp\ton-deploy toolchain help");
+            say(`toolchain: the key ${keys[0] || "(none)"} is not a supported toolchain`);
+            say("toolchain:\tusage\ton-deploy toolchain <key> [--check|--dry-run|--yes]");
+            say("toolchain:\thelp\ton-deploy toolchain help");
             process.exit(2);
         }
         const key = keys[0];

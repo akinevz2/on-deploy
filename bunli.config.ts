@@ -1,8 +1,6 @@
 import { defineConfig } from "@bunli/core";
+import pkg from "./package.json" with { type: "json" };
 
 export default defineConfig({
-    name: "on-deploy",
-    version: "1.2.0",
-    description:
-        "Rigorous dotfiles requirement deployer: verify wm.requires binaries, install the missing ones via the platform deploy script.",
+  ...pkg,
 });

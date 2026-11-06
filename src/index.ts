@@ -22,6 +22,8 @@
 //	single place DISPLAY is decided — no unit hardcodes it).
 
 import { createCLI } from "@bunli/core";
+import { say } from "./lib/lines";
+import pkg from "../package.json";
 import installCommand, { walk } from "./commands/install";
 import checkCommand from "./commands/check";
 import searchCommand from "./commands/search";
@@ -52,6 +54,47 @@ if (argv.length === 0) {
 // `help` as a standalone alias for --help (bunli has no built-in
 // help command; translate before the CLI parses): `help` -> --help,
 // `help <cmd>` -> <cmd> --help
+// `help` as a standalone command — and bare `--help` — are OURS now:
+// bunli's built-in renderer runs before any handler and ignores the
+// terminal width (the WIDTH CONTRACT bypass noted in lib/lines.ts).
+// The root surface renders here with the SAME width-aware helpers the
+// per-verb help groups use; `help <cmd>` still delegates to the verb
+// group's own help (each command renders its own width-aware usage).
+const ROOT_HELP_ENTRIES: [string, { description: string }][] = [
+    ["install", installCommand],
+    ["check", checkCommand],
+    ["search", searchCommand],
+    ["pkg", pkgCommand],
+    ["stow", stowCommand],
+    ["unstow", unstowCommand],
+    ["enable", enableCommand],
+    ["disable", disableCommand],
+    ["configure", configureCommand],
+    ["archive", archiveCommand],
+    ["unarchive", unarchiveCommand],
+    ["packages", packagesCommand],
+    ["preserve", preserveCommand],
+    ["services", servicesCommand],
+    ["toolchain", toolchainCommand],
+    ["depends", dependsCommand],
+    ["detect-server", detectServerCommand],
+    ["managed", managedCommand],
+    ["supports", supportsCommand],
+];
+if (argv.length === 1 && (argv[0] === "help" || argv[0] === "--help" || argv[0] === "-h")) {
+    const { echoHelpList, wrapHelp } = await import("./lib/lines");
+    console.log(`on-deploy ${pkg.version}`);
+    for (const line of wrapHelp(pkg.description)) console.log(`  ${line}`);
+    console.log("");
+    echoHelpList(
+        "on-deploy",
+        "usage: on-deploy <verb> [args]   (help <verb> for the group; bare run = the deploy contract)",
+        ROOT_HELP_ENTRIES.map(([name, cmd]) =>
+            `${name}\t${cmd.description.replaceAll("\n", " ")}`),
+    );
+    process.exit(0);
+}
+
 if (argv[0] === "help") {
     const rest = argv.slice(1);
     // cli.run() re-reads process.argv — rewrite it, not the slice
@@ -71,10 +114,9 @@ const origCwd = process.cwd();
 if (compiled) process.chdir("/");
 
 const cli = await createCLI({
-    name: "on-deploy",
-    version: "1.2.0",
-    description:
-        "Rigorous dotfiles requirement deployer: verify system.required binaries, install the missing ones via the platform deploy script.",
+    name: pkg.name,
+    version: pkg.version,
+    description: pkg.description,
 });
 
 cli.command(installCommand);
@@ -106,7 +148,7 @@ import { detectDisplay } from "./lib/provisioners";
 const inherited = process.env.DISPLAY;
 const _d = detectDisplay();
 if (_d.ok && _d.display !== inherited && process.env.ONDEPLOY_DEBUG) {
-    console.error(`on-deploy: DISPLAY ${inherited ?? "(unset)"} dead? -> ${_d.display}`);
+    say(`on-deploy: DISPLAY ${inherited ?? "(unset)"} dead? -> ${_d.display}`);
 }
 
 if (compiled) process.chdir(origCwd);

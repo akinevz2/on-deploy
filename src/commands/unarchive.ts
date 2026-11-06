@@ -4,6 +4,7 @@
 // call this from their uninstall rules; on-deploy stays generic.
 
 import { defineCommand, option } from "@bunli/core";
+import { say } from "../lib/lines";
 import { z } from "zod";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -22,13 +23,13 @@ export default defineCommand({
     handler: async ({ flags, positional }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
-            console.error(`on-deploy: ${env.problem}`);
+            say(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
         const pkg = positional[0] ?? "";
         if (!pkg || !existsSync(join(DOTS_DIR, pkg, ".local"))) {
-            console.error(`unarchive: not a stow package: ${pkg}`);
-            console.error("unarchive: usage: on-deploy unarchive <pkg>");
+            say(`unarchive: not a stow package: ${pkg}`);
+            say("unarchive: usage: on-deploy unarchive <pkg>");
             process.exit(2);
         }
         const rels = unarchivePackage(DOTS_DIR, pkg, !!flags["dry-run"]);

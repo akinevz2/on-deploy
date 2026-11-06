@@ -5,6 +5,7 @@
 // the package name — no per-package code.
 
 import { defineCommand, option } from "@bunli/core";
+import { say } from "../lib/lines";
 import { z } from "zod";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -14,7 +15,8 @@ import { archivePackage } from "../lib/defaults";
 export default defineCommand({
     name: "archive",
     description:
-        "Back up the current (not dots-owned) $HOME files of a stow package into ~/dots/defaults/",
+        "Back up a package's non-dots $HOME files into dots/defaults/.\n" +
+        "\t--dry-run lists; the checkout keeps everything.",
     options: {
         "dry-run": option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "list what would be collected, copy nothing",
@@ -23,13 +25,13 @@ export default defineCommand({
     handler: async ({ flags, positional }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
-            console.error(`on-deploy: ${env.problem}`);
+            say(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
         const pkg = positional[0] ?? "";
         if (!pkg || !existsSync(join(DOTS_DIR, pkg, ".local"))) {
-            console.error(`archive: not a stow package: ${pkg}`);
-            console.error("archive: usage: on-deploy archive <pkg>");
+            say(`archive: not a stow package: ${pkg}`);
+            say("archive: usage: on-deploy archive <pkg>");
             process.exit(2);
         }
         const rows = archivePackage(DOTS_DIR, pkg, !!flags["dry-run"]);

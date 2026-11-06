@@ -15,7 +15,7 @@
 import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
 import { checkDotsEnv, readRequires } from "../lib/dots";
-import { echoHelpList } from "../lib/lines";
+import { echoHelpList , say } from "../lib/lines";
 import { resolvePackage } from "../lib/deployScript";
 import {
     familyPkgManager, PKG_MANAGER_ID, PKG_OP,
@@ -28,7 +28,8 @@ type Op = "installed" | "search" | "install" | "remove";
 export default defineCommand({
     name: "pkg",
     description:
-        "Generic package operations (installed|search|install|remove) via the deploy target manager",
+        "<op> via the deploy target's package manager.\n" +
+        "\ton-deploy pkg installed|search|install|remove <name>...",
     options: {
         yes: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "no confirmations (non-interactive)",
@@ -41,7 +42,7 @@ export default defineCommand({
     handler: async ({ flags, positional }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
-            console.error(`on-deploy: ${env.problem}`);
+            say(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
         const [op, ...names] = positional;
@@ -56,9 +57,9 @@ export default defineCommand({
             process.exit(0);
         }
         if (!op || !OPS.includes(op as Op) || names.length === 0) {
-            console.error(`pkg: ${op || "(no op)"} is not a pkg op`);
-            console.error("pkg:\tusage\ton-deploy pkg <op> <name>...");
-            console.error("pkg:\thelp\ton-deploy pkg help");
+            say(`pkg: ${op || "(no op)"} is not a pkg op`);
+            say("pkg:\tusage\ton-deploy pkg <op> <name>...");
+            say("pkg:\thelp\ton-deploy pkg help");
             process.exit(2);
         }
         const { target } = await readRequires();
@@ -93,7 +94,7 @@ export default defineCommand({
                 pkgMgr, op: op as PkgOpKind, names: [name], dry,
             });
             if (code !== 0) {
-                console.error(`  ${name.padEnd(20)} FAILED (exit ${code})`);
+                say(`  ${name.padEnd(20)} FAILED (exit ${code})`);
                 failed += 1;
                 continue;
             }
@@ -104,7 +105,7 @@ export default defineCommand({
             }
         }
         if (failed > 0) {
-            console.error(`pkg: ${failed} name(s) failed '${op}'`);
+            say(`pkg: ${failed} name(s) failed '${op}'`);
             process.exit(1);
         }
     },

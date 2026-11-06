@@ -39,7 +39,7 @@ import {
     registryTransportInstalled,
     type PkgDescriptor,
 } from "../lib/adapters";
-import { echoHelpList, echoOrdered } from "../lib/lines";
+import { echoHelpList, echoOrdered , say } from "../lib/lines";
 import { pkgMakefile, stowPkg, swapArtifact, unstowPkg } from "../lib/pkgops";
 import { lookupTransport } from "../lib/pkgmanagers";
 import { readRequires } from "../lib/dots";
@@ -132,7 +132,8 @@ interface MakeResult { ok: boolean; lines: string[] }
 export default defineCommand({
     name: "managed",
     description:
-        "Route managed dots package operations to the adapter Makefile (see also 'on-deploy supports')",
+        "Route ONE package's ops to its adapter Makefile.\n" +
+        "\tmethod/knob syntax: on-deploy supports.",
     options: {
         method: option(z.string().optional(), {
             description: "Override the doftiles.conf record (PACKAGE=source|pkg)",
@@ -163,16 +164,16 @@ export default defineCommand({
             process.exit(0);
         }
         if (!pkg || !op || extra.length > 0) {
-            console.error(`managed: ${op || "(no op)"} is not a managed op`);
-            console.error("managed:\tusage\ton-deploy managed <pkg> <op>");
-            console.error("managed:\thelp\ton-deploy managed <pkg> help");
+            say(`managed: ${op || "(no op)"} is not a managed op`);
+            say("managed:\tusage\ton-deploy managed <pkg> <op>");
+            say("managed:\thelp\ton-deploy managed <pkg> help");
             process.exit(2);
         }
         const { target } = await readRequires();
         const family: string | null = target ?? null;
         if (!pkgMakefile(pkg)) {
-            console.error(`managed: ${pkg}: no adapter`);
-            console.error(`managed:\tabsent\tdots/${pkg}/.local/state/depends/${pkg}.Makefile`);
+            say(`managed: ${pkg}: no adapter`);
+            say(`managed:\tabsent\tdots/${pkg}/.local/state/depends/${pkg}.Makefile`);
             process.exit(2);
         }
         const consultDesc = consult(pkg);
@@ -224,7 +225,7 @@ export default defineCommand({
         }
         if (op === "conf-set") {
             if (args.value === undefined) {
-                console.error("managed: conf-set needs --value");
+                say("managed: conf-set needs --value");
                 process.exit(2);
             }
             if (dryGuard(args.dry, `conf-set ${desc.key}=${args.value}`)) return;
@@ -260,7 +261,7 @@ export default defineCommand({
                 const t = await pkgTransport(desc, family);
                 if (t) {
                     const rc = await t.spec.run({ op: PKG_OP.remove, names: [t.installable], dry: false });
-                    if (rc !== 0) { console.error(`managed: ${desc.pkg}: transport remove FAILED (${t.id})`); process.exit(1); }
+                    if (rc !== 0) { say(`managed: ${desc.pkg}: transport remove FAILED (${t.id})`); process.exit(1); }
                 }
             }
             const r = runAdapter(desc, "uninstall", args.force);
@@ -275,7 +276,7 @@ export default defineCommand({
             // the deployed-already guard (unless --force/--method)
             const resolved = resolveMethod(desc, args);
             if (!methodSupported(desc, resolved)) {
-                console.error(`managed: ${desc.pkg}: unknown method '${resolved}' (methods_supported: ${desc.methods.join(" ")})`);
+                say(`managed: ${desc.pkg}: unknown method '${resolved}' (methods_supported: ${desc.methods.join(" ")})`);
                 process.exit(2);
             }
             console.log(`  ${desc.pkg.padEnd(11)} install (method=${resolved})`);
@@ -283,7 +284,7 @@ export default defineCommand({
                 const r = await runPkg(desc, family, args);
                 for (const line of r.lines) console.log(line);
                 if (!r.ok) {
-                    console.error(`managed: ${desc.pkg}: pkg route FAILED`);
+                    say(`managed: ${desc.pkg}: pkg route FAILED`);
                     process.exit(1);
                 }
                 if (dryGuard(args.dry, `conf-set ${desc.key}=${resolved}`)) return;
@@ -294,7 +295,7 @@ export default defineCommand({
             if (dryGuard(args.dry, "make install-source")) return;
             const r = runAdapter(desc, "install-source", args.force);
             if (!r.ok) {
-                console.error(`managed: ${desc.pkg}: FAILED (make install-source)`);
+                say(`managed: ${desc.pkg}: FAILED (make install-source)`);
                 process.exit(1);
             }
             // landed: stow + swap ONLY where the adapter really placed

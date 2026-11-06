@@ -8,6 +8,7 @@
 // the caller's sudo is passwordless); dryRun prints instead of doing.
 
 import { existsSync, readdirSync } from "node:fs";
+import { say } from "../lib/lines";
 import { join } from "node:path";
 import { confirm } from "./lines";
 
@@ -232,7 +233,7 @@ export async function ensureVcxsrv(
     if (!yes) {
         const ok = await confirm(`  download + silently install VcXsrv from\n    ${url}\n  proceed? [y/N] `);
         if (ok === "abort") {
-            console.error("  EOF (ctrl-d): provision stopped");
+            say("  EOF (ctrl-d): provision stopped");
             process.exit(130);
         }
         if (ok !== "yes") return { name: "vcxsrv", ok: false, detail: "declined", problem: "declined" };

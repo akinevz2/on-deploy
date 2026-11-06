@@ -8,6 +8,7 @@ import {
     unstowPkg, unitsOp, type PkgResult,
 } from "../lib/pkgops";
 import { releaseTui, tuiChecklist } from "../lib/tui";
+import { say } from "../lib/lines";
 
 export type Op = "stow" | "unstow" | "enable" | "disable";
 
@@ -15,7 +16,7 @@ export async function pkgOpTui(op: Op, explicit: string[]): Promise<void> {
     let pkgs = explicit;
     if (pkgs.length === 0) {
         if (!process.stdin.isTTY || !process.stdout.isTTY) {
-            console.error(`${op}: no packages and no tty`);
+            say(`${op}: no packages and no tty`);
             process.exit(2);
         }
         const sel = await tuiChecklist<string>(

@@ -4,6 +4,7 @@
 // defer to their own stow rule; others use their stowed user units.
 
 import { defineCommand, option } from "@bunli/core";
+import { say } from "../lib/lines";
 import { z } from "zod";
 import { checkDotsEnv } from "../lib/dots";
 import { pkgOpTui } from "./tuiRunner";
@@ -19,7 +20,7 @@ export default defineCommand({
     handler: async ({ flags }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
-            console.error(`on-deploy: ${env.problem}`);
+            say(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
         await pkgOpTui("stow", flags.only?.split(/[,\s]+/).filter(Boolean) ?? []);

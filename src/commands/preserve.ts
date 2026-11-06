@@ -36,7 +36,7 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { checkDotsEnv, DOTS_DIR } from "../lib/dots";
 import { stowPackages } from "../lib/pkgops";
-import { confirm } from "../lib/lines";
+import { confirm , say } from "../lib/lines";
 import { preservePackage, scanConflicts, type Conflict, type PreserveOptions } from "../lib/preserve";
 import { showDiffView } from "../lib/diffview";
 import { tuiChecklist, tuiSelect } from "../lib/tui";
@@ -177,7 +177,8 @@ async function resolveInteractive(pkgs: string[], opts: PreserveOptions): Promis
 export default defineCommand({
     name: "preserve",
     description:
-        "Resolve stow conflicts for packages before (re)stowing — per-file TUI with side-by-side diff, or the archive-first default",
+        "Resolve stow conflicts before (re)stowing.\n" +
+        "\tper-file TUI with side-by-side diff; archive-first default.",
     options: {
         "dry-run": option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "print the plan per package, change nothing",
@@ -205,7 +206,7 @@ export default defineCommand({
     handler: async ({ flags, positional }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
-            console.error(`on-deploy: ${env.problem}`);
+            say(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
 
@@ -213,8 +214,8 @@ export default defineCommand({
         if (flags.only) pkgs = flags.only.split(/[,\s]+/).filter(Boolean);
         if (pkgs.length === 0) {
             if (!process.stdin.isTTY) {
-                console.error("preserve: no packages and no tty");
-                console.error("preserve: usage: on-deploy preserve <pkg>|--only <pkgs> [--adopt] [--restore] [--keep] [--dry-run]");
+                say("preserve: no packages and no tty");
+                say("preserve: usage: on-deploy preserve <pkg>|--only <pkgs> [--adopt] [--restore] [--keep] [--dry-run]");
                 process.exit(2);
             }
             const all = stowPackages();
@@ -258,7 +259,7 @@ export default defineCommand({
         // branch-flag or non-TTY flow (archive-first default per pkg)
         const known = stowPackages();
         const unknown = pkgs.filter((p) => !known.includes(p));
-        for (const p of unknown) console.error(`preserve: not a dots package: ${p}`);
+        for (const p of unknown) say(`preserve: not a dots package: ${p}`);
         const targets = pkgs.filter((p) => known.includes(p));
         if (unknown.length > 0 && targets.length === 0) process.exit(2);
         const isTTY = !!process.stdin.isTTY;
@@ -270,7 +271,7 @@ export default defineCommand({
                         `preserve ${pkg}: restore your stored files over the deployed version? [y/N] `,
                     );
                     if (ok === "abort") {
-                        console.error("preserve: EOF (ctrl-d) — stopped");
+                        say("preserve: EOF (ctrl-d) — stopped");
                         process.exit(130);
                     }
                     return ok === "yes";

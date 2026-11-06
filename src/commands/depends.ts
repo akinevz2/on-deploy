@@ -32,7 +32,7 @@ import { z } from "zod";
 import { join } from "node:path";
 import { checkDotsEnv, DOTS_DIR } from "../lib/dots";
 import { runMakeSpun } from "../lib/pkgops";
-import { echoHelpList } from "../lib/lines";
+import { echoHelpList , say } from "../lib/lines";
 import {
     depsMakefile, submodulesByPackage, type PkgResult,
 } from "../lib/pkgops";
@@ -69,7 +69,8 @@ async function runDepsRuleSpun(pkg: string, rule: string, makeVars: string[]): P
 export default defineCommand({
     name: "depends",
     description:
-        "Drive the adapter Makefiles: sync the submodules, build + install (--build|--install; bare prints the report)",
+        "Drive the per-package Makefiles over the submodule manifest.\n" +
+        "\t--build build only, --install build+deploy, --only narrows.",
     options: {
         build: option(z.boolean().optional(), { argumentKind: "flag" as const,
             description: "sync + run each package's Makefile `build` rule (toolchain + compile, no install)",
@@ -96,7 +97,7 @@ export default defineCommand({
     handler: async ({ flags, positional }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
-            console.error(`on-deploy: ${env.problem}`);
+            say(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
         const raw = (positional ?? [])[0] ?? "";
@@ -127,7 +128,7 @@ export default defineCommand({
                 if (shInherit(["git", "submodule", "sync"], DOTS_DIR) !== 0) process.exit(1);
                 console.log("depends: submodule pins");
                 if (shInherit(["git", "submodule", "update", "--init", "--recursive"], DOTS_DIR) !== 0) {
-                    console.error("depends: submodule update FAILED");
+                    say("depends: submodule update FAILED");
                     process.exit(1);
                 }
             }
@@ -178,7 +179,7 @@ export default defineCommand({
             for (const l of r.lines) console.log(l);
         }
         if (results.some((r) => !r.ok)) {
-            console.error("depends: FAILED packages above");
+            say("depends: FAILED packages above");
             process.exit(1);
         }
         console.log(`depends: ${mode} done on ${targets.length} package(s)`);

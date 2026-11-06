@@ -141,7 +141,10 @@ export function wrapHelp(text: string, width = helpWidth()): string[] {
  *  column pairing. */
 export function echoHelpList(module: string, usage: string, entries: string[]): void {
     const width = helpWidth();
-    const emit = (line: string): void => console.error(`${module}:\t${line}`);
+    // STDOUT (the bunli output policy: rendered content is stdout;
+    // stderr is only for real failures — a themed terminal paints
+    // stderr red, and help/usage text is NOT a failure)
+    const emit = (line: string): void => console.log(`${module}:\t${line}`);
     emit(usage);
     let index = 0;
     while (index < entries.length) {
@@ -161,5 +164,13 @@ export function echoHelpList(module: string, usage: string, entries: string[]): 
  *  shortest last */
 export function echoOrdered(lines: string[]): void {
     const ordered = [...lines.filter(Boolean)].sort((a, b) => b.length - a.length);
-    for (const line of ordered) console.error(line);
+    for (const line of ordered) console.log(line);
+}
+
+/** the repo print channel — STDOUT UNIVERSALLY (never console.error):
+ *  themed terminals paint stderr red, and diagnostics are not painted
+ *  errors. Failures are conveyed by EXIT CODES (and words on stdout,
+ *  prefixed where it matters). Every former console.error rides this. */
+export function say(...lines: string[]): void {
+    for (const line of lines) console.log(line);
 }

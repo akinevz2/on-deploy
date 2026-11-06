@@ -10,6 +10,7 @@
 // in those scripts; see depends/.local/bin/install/.)
 
 import { defineCommand, option } from "@bunli/core";
+import { say } from "../lib/lines";
 import { z } from "zod";
 import { checkDotsEnv, readRequires, missing } from "../lib/dots";
 import { resolvePackage } from "../lib/deployScript";
@@ -17,7 +18,8 @@ import { resolvePackage } from "../lib/deployScript";
 export default defineCommand({
     name: "search",
     description:
-        "Resolve the providing package of required binaries in the target repositories (read-only)",
+        "Which package provides a binary? (read-only)\n" +
+        "\t--only narrows; --all includes installed.",
     options: {
         only: option(z.string().optional(), {
             description: "comma/space-separated subset of binaries to search",
@@ -30,7 +32,7 @@ export default defineCommand({
     handler: async ({ flags }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
-            console.error(`on-deploy: ${env.problem}`);
+            say(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
         const requires = await readRequires();
@@ -55,7 +57,7 @@ export default defineCommand({
             }
         }
         if (failed > 0) {
-            console.error(`search: ${failed} binary/b unresolved`);
+            say(`search: ${failed} binary/b unresolved`);
             process.exit(1);
         }
     },
