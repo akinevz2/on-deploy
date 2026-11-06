@@ -589,6 +589,7 @@ export default defineCommand({
                     // the wizard's install confirms + sudo are LINE-READER
                     // flows; the raw-mode TUI session must step down first
                     await releaseTui();
+                    console.log("wizard: tui released (cooked terminal)");
                     console.log("wizard: binaries");
                     const failed = await walk(false, false);
                     if (failed > 0) {
