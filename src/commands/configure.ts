@@ -25,7 +25,7 @@ import { readLine } from "../lib/lines";
 import { runApply } from "../lib/configureCore";
 import { walk } from "./install";
 import {
-    packagesWithMakefiles, printResults, runRule, stowPackages, stowPkg,
+    packagesWithMakefiles, printResults, pkgMakefile, runMakeSpun, stowPackages, stowPkg,
     type PkgResult,
 } from "../lib/pkgops";
 // the interactive layer is OURS (lib/tui*): no facade prompts — the
@@ -612,7 +612,10 @@ export default defineCommand({
                     }
                     const results: PkgResult[] = [];
                     for (const pkg of rules) {
-                        results.push(runRule(pkg, "install"));
+                        const mf = pkgMakefile(pkg);
+                        if (!mf) { results.push({ pkg, ok: false, lines: ["no Makefile"] }); continue; }
+                        const r = await runMakeSpun(mf.dir, mf.file, [], "install", `${pkg}:install`);
+                        results.push({ pkg, ok: r.ok, lines: r.lines });
                     }
                     printResults(results);
                     if (results.some((r) => !r.ok)) process.exit(1);
