@@ -233,10 +233,18 @@ export default defineCommand({
             const subOk = desc.subDir ? existsSync(join(process.env.HOME!, "dots", desc.subDir)) : true;
             // query the installed binary for its version (extracting the
             // semantic version from whatever banner it prints); falls
-            // back to bare "installed" when the binary can't answer
-            const versionOut = Bun.spawnSync([desc.pkg, "--version"]);
-            const versionMatch = versionOut.stdout.toString().match(/\d+\.\d+(\.\d+)?/);
-            const version = versionMatch ? versionMatch[0] : "";
+            // back to bare "installed" when the binary can't answer —
+            // or when the PACKAGE NAME is not a $PATH binary at all
+            // (function-backed packages like get: the deployment is a
+            // shell function + a differently-named script)
+            let version = "";
+            try {
+                const versionOut = Bun.spawnSync([desc.pkg, "--version"]);
+                const versionMatch = versionOut.stdout.toString().match(/\d+\.\d+(\.\d+)?/);
+                version = versionMatch ? versionMatch[0] : "";
+            } catch {
+                // CommandNotFoundError: desc.pkg is not a PATH binary
+            }
             const installedText = version ? `installed ${version}` : "installed";
             const isInstalled = registryOk || deployedAlready(desc);
             console.log(`  ${desc.pkg.padEnd(11)} ${isInstalled ? installedText : deployedState(desc)}`);
