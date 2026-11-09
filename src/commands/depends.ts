@@ -36,6 +36,7 @@ import { say } from "../lib/lines";
 import {
     depsMakefile, submodulesByPackage, type PkgResult,
 } from "../lib/pkgops";
+import { bind, flush, pure, tell, type Out } from "../lib/out";
 
 function shInherit(args: string[], cwd: string): number {
     const r = Bun.spawnSync(args, {
@@ -64,6 +65,101 @@ async function runDepsRuleSpun(pkg: string, rule: string, makeVars: string[]): P
     const dir = join(DOTS_DIR, pkg);
     const r = await runMakeSpun(dir, file, makeVars, rule, `${pkg}:${rule}`);
     return { pkg, ok: r.ok, lines: r.lines };
+}
+
+async function walk(
+    mode: string, dry: boolean, noSync: boolean, only: string | undefined, force: boolean,
+): Promise<Out<number>> {
+    // 1) SYNC — the submodule checkouts at their RECORDED pins
+    // (pinned doctrine: nested asset submodules — e.g. bat's
+    // themes/syntaxes — are updated by UPSTREAM, not chased per
+    // machine; remotes never re-pull sub-submodule churn.
+    // `git submodule update --remote` must be run BY HAND to bump)
+    // MANIFEST-SCOPED: system.depends is the submodule manifest and
+    // the SOURCE OF TRUTH — only the configured paths are synced;
+    // a package dropped from the manifests is not chased here (its
+    // checkout stays local and untouched)
+    const subs = submodulesByPackage();
+    const configuredPaths = Object.values(subs).flat();
+    let out: Out<number> = pure(0);
+    if (!noSync) {
+        if (dry) {
+            out = bind(out, (w) => pure(w, "  [dry] submodule sync+pins"));
+        } else if (configuredPaths.length === 0) {
+            out = bind(out, (w) => pure(w, "depends: no submodules configured (system.depends is empty)"));
+        } else {
+            // [FLUSH-CLASS: exec] the git children below inherit stdio —
+            // each queued line must land before the next child's output
+            flush(bind(out, (w) => pure(w, "depends: submodule sync")));
+            out = pure(0);
+            if (shInherit(["git", "submodule", "sync", "--", ...configuredPaths], DOTS_DIR) !== 0) {
+                return pure(1);
+            }
+            // [FLUSH-CLASS: exec] same boundary before the update child
+            flush(bind(out, (w) => pure(w, "depends: submodule pins")));
+            out = pure(0);
+            if (shInherit(["git", "submodule", "update", "--init", "--recursive", "--", ...configuredPaths], DOTS_DIR) !== 0) {
+                return bind(out, () => pure(1, "depends: submodule update FAILED"));
+            }
+        }
+    }
+
+    // 2) DRIVE — CONFIGURED SCOPE: the packages system.depends lists
+    // (submodule manifest), intersected with Makefile presence — a
+    // package with submodules but no Makefile is a misconfiguration,
+    // reported, not silently skipped
+    let targets = Object.keys(subs)
+        .filter((p) => depsMakefile(p) !== null)
+        .sort();
+    for (const p of Object.keys(subs)) {
+        if (!depsMakefile(p)) out = bind(out, (w) => pure(w, `depends: ${p}: depends/${p}/Makefile not found`));
+    }
+    if (only) {
+        const wanted = only.split(/[,\s]+/).filter(Boolean);
+        const unknown = wanted.filter((p) => !targets.includes(p));
+        for (const p of unknown) out = bind(out, (w) => pure(w, `depends: ${p}: depends/${p}/Makefile not found`));
+        targets = targets.filter((p) => wanted.includes(p));
+    }
+    if (!mode || targets.length === 0) {
+        // 3) discovery report
+        return bind(out, () => pure(0,
+            `depends: packages: ${targets.join(" ") || "(none)"}`,
+            ...targets.map((pkg) =>
+                `  ${pkg.padEnd(12)} <- ${(subs[pkg] ?? ["(no submodules)"]).join(" ")}`),
+            `depends: rerun --build|-b or --install|-i` +
+            ` (the subwalk depth)`,
+        ));
+    }
+
+    out = bind(out, (w) => pure(w, 
+        `depends: ${mode} ${targets.join(" ") || "(none)"}` +
+        ` — per-pkg Makefile${noSync ? ", no sync" : ", synced"}` +
+        `${dry ? ", dry" : ""}`,
+    ));
+    if (dry) {
+        for (const pkg of targets) out = bind(out, (w) => pure(w, `  [dry] make ${pkg} ${mode}`));
+        return out;
+    }
+    // [FLUSH-CLASS: exec] the spun make children below CAPTURE their
+    // output, but their spinner writes live on stderr — queued lines
+    // must land before the first label ticks
+    flush(out);
+    out = pure(0);
+    const makeVars = force ? ["FORCE=1"] : [];
+    const results: PkgResult[] = [];
+    for (const pkg of targets) results.push(await runDepsRuleSpun(pkg, mode, makeVars));
+    // [FLUSH-CLASS: buffered] the collected make output rides Out — it
+    // prints at the handler's exit flush in this same position
+    for (const r of results) {
+        out = bind(out, (w) => pure(w, 
+            `==${r.pkg} ${r.ok ? "SUCCESS" : "FAILURE"}`,
+            ...r.lines,
+        ));
+    }
+    if (results.some((r) => !r.ok)) {
+        return bind(out, () => pure(1, "depends: FAILED packages above"));
+    }
+    return bind(out, () => pure(0, `depends: ${mode} done on ${targets.length} package(s)`));
 }
 
 export default defineCommand({
@@ -95,88 +191,22 @@ export default defineCommand({
     handler: async ({ flags, positional }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
+            // [FLUSH-CLASS: exit] precondition failure — the problem
+            // line is the whole transcript; exit code carries severity
             say(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
         const raw = (positional ?? [])[0] ?? "";
         const mode = flags.install ? "install" : flags.build ? "build" : "";
-        const dry = !!flags["dry-run"];
-        const noSync = !!flags["no-sync"];
-
-        // 1) SYNC — the submodule checkouts at their RECORDED pins
-        // (pinned doctrine: nested asset submodules — e.g. bat's
-        // themes/syntaxes — are updated by UPSTREAM, not chased per
-        // machine; remotes never re-pull sub-submodule churn.
-        // `git submodule update --remote` must be run BY HAND to bump)
-        // MANIFEST-SCOPED: system.depends is the submodule manifest and
-        // the SOURCE OF TRUTH — only the configured paths are synced;
-        // a package dropped from the manifests is not chased here (its
-        // checkout stays local and untouched)
-        const subs = submodulesByPackage();
-        const configuredPaths = Object.values(subs).flat();
-        if (!noSync) {
-            if (dry) {
-                console.log("  [dry] submodule sync+pins");
-            } else if (configuredPaths.length === 0) {
-                console.log("depends: no submodules configured (system.depends is empty)");
-            } else {
-                console.log("depends: submodule sync");
-                if (shInherit(["git", "submodule", "sync", "--", ...configuredPaths], DOTS_DIR) !== 0) process.exit(1);
-                console.log("depends: submodule pins");
-                if (shInherit(["git", "submodule", "update", "--init", "--recursive", "--", ...configuredPaths], DOTS_DIR) !== 0) {
-                    say("depends: submodule update FAILED");
-                    process.exit(1);
-                }
-            }
-        }
-
-        // 2) DRIVE — CONFIGURED SCOPE: the packages system.depends lists
-        // (submodule manifest), intersected with Makefile presence — a
-        // package with submodules but no Makefile is a misconfiguration,
-        // reported, not silently skipped
-        let targets = Object.keys(subs)
-            .filter((p) => depsMakefile(p) !== null)
-            .sort();
-        for (const p of Object.keys(subs)) {
-            if (!depsMakefile(p)) console.log(`depends: ${p}: depends/${p}/Makefile not found`);
-        }
-        if (flags.only) {
-            const wanted = flags.only.split(/[,\s]+/).filter(Boolean);
-            const unknown = wanted.filter((p) => !targets.includes(p));
-            for (const p of unknown) console.log(`depends: ${p}: depends/${p}/Makefile not found`);
-            targets = targets.filter((p) => wanted.includes(p));
-        }
-        if (!mode || targets.length === 0) {
-            // 3) discovery report
-            console.log(`depends: packages: ${targets.join(" ") || "(none)"}`);
-            for (const pkg of targets) {
-                console.log(`  ${pkg.padEnd(12)} <- ${(subs[pkg] ?? ["(no submodules)"]).join(" ")}`);
-            }
-            console.log(`depends: rerun --build|-b or --install|-i` +
-                ` (the subwalk depth)`);
-            return;
-        }
-
-        console.log(
-            `depends: ${mode} ${targets.join(" ") || "(none)"}` +
-            ` — per-pkg Makefile${noSync ? ", no sync" : ", synced"}` +
-            `${dry ? ", dry" : ""}`,
-        );
-        if (dry) {
-            for (const pkg of targets) console.log(`  [dry] make ${pkg} ${mode}`);
-            return;
-        }
-        const makeVars = flags.force ? ["FORCE=1"] : [];
-        const results: PkgResult[] = [];
-        for (const pkg of targets) results.push(await runDepsRuleSpun(pkg, mode, makeVars));
-        for (const r of results) {
-            console.log(`==${r.pkg} ${r.ok ? "SUCCESS" : "FAILURE"}`);
-            for (const l of r.lines) console.log(l);
-        }
-        if (results.some((r) => !r.ok)) {
-            say("depends: FAILED packages above");
-            process.exit(1);
-        }
-        console.log(`depends: ${mode} done on ${targets.length} package(s)`);
+        // [FLUSH-CLASS: exit] the walk's buffered lines flush here —
+        // after this point only the exit code speaks
+        const code = flush(await walk(
+            mode,
+            !!flags["dry-run"],
+            !!flags["no-sync"],
+            flags.only,
+            !!flags.force,
+        ));
+        if (code !== 0) process.exit(code);
     },
 });

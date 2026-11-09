@@ -23,6 +23,7 @@
 
 import { createCLI } from "@bunli/core";
 import { say } from "./lib/lines";
+import { flush } from "./lib/out";
 import pkg from "../package.json";
 import installCommand, { walk } from "./commands/install";
 import checkCommand from "./commands/check";
@@ -47,7 +48,9 @@ import supportsCommand from "./commands/supports";
 const argv = process.argv.slice(2);
 if (argv.length === 0) {
     // bare: check + interactive deploy (the on.deploy contract)
-    const failed = await walk(false, false);
+    // [FLUSH-CLASS: exit] the walk's buffered verdict flushes before
+    // the exit code is chosen — nothing prints after this
+    const failed = flush(await walk(false, false));
     process.exit(failed > 0 ? 1 : 0);
 }
 

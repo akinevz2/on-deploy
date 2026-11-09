@@ -41,6 +41,7 @@ import { checkDotsEnv, DOTS_DIR } from "../lib/dots";
 import { stowPackages } from "../lib/pkgops";
 import { confirm, readLine, say } from "../lib/lines";
 import { preservePackage, scanConflicts, type Conflict, type PreserveOptions } from "../lib/preserve";
+import { bind, flush, map, pure, tell, type Out } from "../lib/out";
 
 /** the unified diff text (git diff --no-index, exit code 1 = DIFFERS) */
 function unifiedDiff(repoPath: string, homePath: string): string[] {
@@ -67,12 +68,12 @@ async function adoptPrompt(): Promise<"adopt" | "dots" | "abort"> {
  * accept/reject line decides. No TUI layer: the opentui event loop
  * broke on submenu navigation (egregious listener overriding); a
  * printed diff + one prompt cannot break. */
-async function resolveInteractive(pkgs: string[], opts: PreserveOptions): Promise<number> {
+async function resolveInteractive(pkgs: string[], opts: PreserveOptions): Promise<Out<number>> {
     const known = stowPackages();
     const unknown = pkgs.filter((p) => !known.includes(p));
-    for (const p of unknown) console.log(`preserve: not a dots package: ${p}`);
+    let out: Out<number> = pure(0, ...unknown.map((p) => `preserve: not a dots package: ${p}`));
     const targets = pkgs.filter((p) => known.includes(p));
-    if (targets.length === 0 && unknown.length > 0) process.exit(2);
+    if (targets.length === 0 && unknown.length > 0) return map(out, () => 2);
 
     // 1. scan everything first: clean packages deploy at once, the
     // conflicted ones are resolved file by file below
@@ -86,22 +87,25 @@ async function resolveInteractive(pkgs: string[], opts: PreserveOptions): Promis
     }
     const noConflict = targets.filter((t) => !groups.some((g) => g.pkg === t));
 
-    console.log(`preserve: scanning ${targets.length} package(s); ${groups.length} with conflicts, ${noConflict.length} clean`);
-    console.log(`preserve: deploying the clean ones`);
+    out = bind(out, (w) => pure(w, 
+        `preserve: scanning ${targets.length} package(s); ${groups.length} with conflicts, ${noConflict.length} clean`,
+        `preserve: deploying the clean ones`,
+    ));
     for (const pkg of noConflict) {
         const r = await preservePackage(pkg, { ...opts, yes: true, keep: true });
-        for (const l of r.lines) console.log(l);
+        out = bind(out, (w) => pure(w, ...r.lines));
     }
 
     // 2. the conflicted packages, file by file: print the inline diff,
     // one accept/reject per file
-    let worst = 0;
     for (const group of groups) {
         const { pkg } = group;
         if (group.hard.length > 0) {
-            console.log(`preserve ${pkg}: HARD conflicts skipped (a directory where the package needs a file — resolve by hand):`);
-            for (const c of group.hard) console.log(`  ${c.homePath}`);
-            worst = Math.max(worst, 1);
+            out = bind(out, (w) => pure(w, 
+                `preserve ${pkg}: HARD conflicts skipped (a directory where the package needs a file — resolve by hand):`,
+                ...group.hard.map((c) => `  ${c.homePath}`),
+            ));
+            out = map(out, (w) => Math.max(w, 1));
         }
         if (group.conflicts.length === 0) continue;
         const dotsWins: Conflict[] = [];
@@ -109,25 +113,68 @@ async function resolveInteractive(pkgs: string[], opts: PreserveOptions): Promis
         for (const c of group.conflicts) {
             const kind = c.kind === "file" ? `${c.bytes ?? "?"}B` : c.kind;
             const diff = unifiedDiff(join(DOTS_DIR, pkg, c.rel), c.homePath);
-            console.log(`\n===== ${c.rel} (${kind}) — dots version vs deployed ($HOME) =====`);
-            if (diff.length > 0) {
-                for (const l of diff) console.log(l);
-            } else {
-                console.log("  (no textual diff — binary content or already identical)");
-            }
+            const body = diff.length > 0
+                ? diff
+                : ["  (no textual diff — binary content or already identical)"];
+            // [FLUSH-CLASS: prompt] the adopt prompt below reads stdin —
+            // the diff must be on the terminal before the read
+            flush(bind(out, (w) => pure(w, 
+                `\n===== ${c.rel} (${kind}) — dots version vs deployed ($HOME) =====`,
+                ...body,
+            )));
+            out = pure(out.value);
             const a = await adoptPrompt();
             if (a === "abort") {
-                console.log("preserve: EOF (ctrl-d) — stopped; undecided files stay untouched");
+                // [FLUSH-CLASS: prompt] abort report before exit — the
+                // exit(130) must not swallow the explanation
+                flush(tell("preserve: EOF (ctrl-d) — stopped; undecided files stay untouched"));
                 process.exit(130);
             }
             if (a === "adopt") mineWins.push(c);
             else dotsWins.push(c);
         }
         const r = await preservePackage(pkg, { ...opts, yes: true, keep: true, dotsWins, mineWins });
-        for (const l of r.lines) console.log(l);
-        if (r.code > worst) worst = r.code;
+        out = bind(out, (w) => pure(Math.max(w, r.code), ...r.lines));
     }
-    return worst;
+    return out;
+}
+
+/** branch-flag or non-TTY flow (archive-first default per pkg) */
+async function runArchiveFlow(pkgs: string[], opts: PreserveOptions): Promise<Out<number>> {
+    let out: Out<number> = pure(0,
+        "preserve: no TTY on this invocation " +
+        "(stdin/stdout piped — e.g. running under make from a captured shell) — " +
+        "the resolver UI needs a real terminal; taking the archive-first keep flow instead",
+    );
+    const known = stowPackages();
+    const unknown = pkgs.filter((p) => !known.includes(p));
+    for (const p of unknown) out = bind(out, (w) => pure(w, `preserve: not a dots package: ${p}`));
+    const targets = pkgs.filter((p) => known.includes(p));
+    if (unknown.length > 0 && targets.length === 0) return map(out, () => 2);
+    const isTTY = !!process.stdin.isTTY;
+    for (const pkg of targets) {
+        const result = await preservePackage(pkg, opts, {
+            ask: async () => {
+                if (!isTTY) return false; // default: keep
+                // [FLUSH-CLASS: prompt] confirm() below reads stdin —
+                // queued lines must be on the terminal before the read
+                flush(out);
+                out = pure(out.value);
+                const ok = await confirm(
+                    `preserve ${pkg}: restore your stored files over the deployed version? [y/N] `,
+                );
+                if (ok === "abort") {
+                    // [FLUSH-CLASS: prompt] abort report before exit —
+                    // the exit(130) must not swallow the explanation
+                    flush(tell("preserve: EOF (ctrl-d) — stopped"));
+                    process.exit(130);
+                }
+                return ok === "yes";
+            },
+        }, DOTS_DIR);
+        out = bind(out, (w) => pure(Math.max(w, result.code), ...result.lines));
+    }
+    return out;
 }
 
 export default defineCommand({
@@ -160,6 +207,8 @@ export default defineCommand({
     handler: async ({ flags, positional }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
+            // [FLUSH-CLASS: exit] precondition failure — the problem
+            // line is the whole transcript; exit code carries severity
             say(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
@@ -167,6 +216,8 @@ export default defineCommand({
         let pkgs = positional.filter(Boolean);
         if (flags.only) pkgs = flags.only.split(/[,\s]+/).filter(Boolean);
         if (pkgs.length === 0) {
+            // [FLUSH-CLASS: exit] usage failure — the lines are the
+            // whole transcript; exit code carries severity
             say("preserve: no packages given — available dots packages:");
             say(`preserve:\t${stowPackages().join(" ")}`);
             say("preserve:\tusage\ton-deploy preserve <pkg>|--only <pkgs> [--adopt] [--keep] [--restore] [--dry-run]");
@@ -183,47 +234,23 @@ export default defineCommand({
         };
 
         // THE RESOLVER: interactive TTY, no branch flags picked, not a
-        // dry run — per-package checklist + per-file diff/decision UI
+        // dry run — per-package checklist + per-file diff/decision UI.
+        // NEVER in the install chain (ONDEPLOY_INSTALL_CHAIN=1): the
+        // chain runs post-sudo, and post-sudo interaction is the
+        // freeze class — the chain's preserve resolves as keep (the
+        // ask callback's non-tty default), deterministically.
         const interactive =
+            process.env.ONDEPLOY_INSTALL_CHAIN !== "1" &&
             process.stdin.isTTY &&
             process.stdout.isTTY &&
             !flags.yes && !flags.keep && !flags.restore && !flags.adopt && !flags["dry-run"];
-        let worst = 0;
         if (interactive) {
-            worst = await resolveInteractive(pkgs, opts);
-            process.exit(worst);
+            // [FLUSH-CLASS: exit] the resolver's buffered lines flush
+            // here — the exit code carries the worst package result
+            process.exit(flush(await resolveInteractive(pkgs, opts)));
         }
-        console.log(
-            "preserve: no TTY on this invocation " +
-            "(stdin/stdout piped — e.g. running under make from a captured shell) — " +
-            "the resolver UI needs a real terminal; taking the archive-first keep flow instead",
-        );
-
-        // branch-flag or non-TTY flow (archive-first default per pkg)
-        const known = stowPackages();
-        const unknown = pkgs.filter((p) => !known.includes(p));
-        for (const p of unknown) say(`preserve: not a dots package: ${p}`);
-        const targets = pkgs.filter((p) => known.includes(p));
-        if (unknown.length > 0 && targets.length === 0) process.exit(2);
-        const isTTY = !!process.stdin.isTTY;
-        for (const pkg of targets) {
-            const result = await preservePackage(pkg, opts, {
-                ask: async () => {
-                    if (!isTTY) return false; // default: keep
-                    const ok = await confirm(
-                        `preserve ${pkg}: restore your stored files over the deployed version? [y/N] `,
-                    );
-                    if (ok === "abort") {
-                        say("preserve: EOF (ctrl-d) — stopped");
-                        process.exit(130);
-                    }
-                    return ok === "yes";
-                },
-            }, DOTS_DIR);
-            for (const l of result.lines) console.log(l);
-            if (result.code > worst) worst = result.code;
-        }
-        process.exit(worst);
+        // [FLUSH-CLASS: exit] the archive flow's buffered lines flush
+        // here — the exit code carries the worst package result
+        process.exit(flush(await runArchiveFlow(pkgs, opts)));
     },
 });
-

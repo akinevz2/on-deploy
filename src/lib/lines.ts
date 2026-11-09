@@ -13,6 +13,14 @@
 // never an implicit yes (the old reader's empty-string resolution made
 // "install?" treat ctrl-d as a YES — the "signals resume the script"
 // bug).
+//
+// ── RELATIONSHIP TO lib/out.ts (the 2026-11 sanitisation pass) ────────
+// say() IS the flush primitive: the only place buffered Out lines
+// land on the terminal (out.flush() calls it). Direct say/console.log
+// calls remaining in the codebase are the UNBUFFERABLE boundaries —
+// each carries a [FLUSH-CLASS: prompt|exec|exit] comment asserting why
+// it cannot ride the buffered path. New code: build Out, flush at the
+// boundary; never print mid-computation.
 
 const pending: string[] = [];
 let resolvers: ((line: string | null) => void)[] = [];

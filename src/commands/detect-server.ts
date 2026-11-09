@@ -34,6 +34,7 @@
 
 import { defineCommand, option } from "@bunli/core";
 import { say } from "../lib/lines";
+import { bind, flush, pure, type Out } from "../lib/out";
 import { z } from "zod";
 import { existsSync, writeFileSync, chmodSync } from "node:fs";
 import { detectDisplay, sh } from "../lib/provisioners";
@@ -48,29 +49,27 @@ function probeAddress(d: string): boolean {
 
 /** persistSystemd — set DISPLAY in the systemd user manager environment.
  *  Detects systemd by binary presence + an answering `systemctl --user`;
- * returns a stderr-explained failure rather than throwing on SysV. */
-function persistSystemd(display: string): boolean {
+ *  returns an Out<boolean> (diagnostics ride the lines) rather than
+ *  printing: [FLUSH-CLASS: buffered] — the sh() probes are piped. */
+function persistSystemd(display: string): Out<boolean> {
     if (!sh("sh", ["-c", "command -v systemctl"]).out) {
-        say("detect-server: systemd not present — skipping --persist-to-systemd");
-        return false;
+        return pure(false, "detect-server: systemd not present — skipping --persist-to-systemd");
     }
     const up = sh("sh", ["-c", "systemctl --user >/dev/null 2>&1"]);
     if (up.code !== 0) {
-        say("detect-server: systemd user session not reachable — skipping --persist-to-systemd");
-        return false;
+        return pure(false, "detect-server: systemd user session not reachable — skipping --persist-to-systemd");
     }
     const r = sh("systemctl", ["--user", "set-environment", `DISPLAY=${display}`]);
     if (r.code === 0) {
-        say(`detect-server: systemd user environment DISPLAY=${display} set`);
-        return true;
+        return pure(true, `detect-server: systemd user environment DISPLAY=${display} set`);
     }
-    say("detect-server: systemctl --user set-environment failed — skipping");
-    return false;
+    return pure(false, "detect-server: systemctl --user set-environment failed — skipping");
 }
 
 /** persistEnvFile — executable sh snippet with the exported variable.
- *  Sourced (`. <file>`) by rc.d scripts anywhere, or run directly. */
-function persistEnvFile(path: string, display: string): boolean {
+ *  Sourced (`. <file>`) by rc.d scripts anywhere, or run directly.
+ *  [FLUSH-CLASS: buffered] — filesystem work only, lines ride upward. */
+function persistEnvFile(path: string, display: string): Out<boolean> {
     const overwrote = existsSync(path);
     const body =
         "#!/bin/sh\n" +
@@ -80,14 +79,12 @@ function persistEnvFile(path: string, display: string): boolean {
     try {
         writeFileSync(path, body);
         chmodSync(path, 0o755);
-        say(
+        return pure(true,
             `detect-server: ${overwrote ? "rewrote" : "wrote"} ${path}` +
             " (sourced or executable: export DISPLAY set)",
         );
-        return true;
     } catch (e) {
-        say(`detect-server: cannot write ${path}: ${e}`);
-        return false;
+        return pure(false, `detect-server: cannot write ${path}: ${e}`);
     }
 }
 
@@ -112,6 +109,7 @@ export default defineCommand({
     },
     handler: async ({ flags, positional }) => {
         if (positional.length > 1) {
+            // [FLUSH-CLASS: exit] usage report — exit code carries severity
             say("detect-server: usage: on-deploy detect-server [ADDRESS] [--persist-to-systemd] [--persist-to-env=<file>] [--dry-run]");
             process.exit(2);
         }
@@ -123,6 +121,7 @@ export default defineCommand({
             // explicit address: checked, never silently replaced — an
             // unreachable user-specified server is an error, not a probe miss
             if (!probeAddress(addr)) {
+                // [FLUSH-CLASS: exit] failure report — exit code carries severity
                 say(`detect-server: ${addr} does not answer xset q — not persisting it`);
                 process.exit(1);
             }
@@ -130,6 +129,7 @@ export default defineCommand({
         } else {
             const r = detectDisplay();
             if (!r.ok) {
+                // [FLUSH-CLASS: exit] failure report — exit code carries severity
                 say(`detect-server: no reachable X display — probed:${r.probed.join(" ") || " (none)"}`);
                 process.exit(1);
             }
@@ -137,24 +137,37 @@ export default defineCommand({
         }
 
         // persist AFTER the display is known; both are best-effort but the
-        // SD one failing (its stderr explains why) doesn't block the file
-        let ok = true;
+        // SD one failing (its stderr explains why) doesn't block the file.
+        // [FLUSH-CLASS: buffered] the persist diagnostics ride Out values;
+        // the same && combination shape as before, composed via bind/map
+        let out: Out<boolean> = pure(true);
         if (flags["persist-to-systemd"] || flags["persist-to-env"]) {
             if (dry) {
-                console.log(`    [dry-run] ${
-                    [
-                        flags["persist-to-systemd"] ? `systemctl --user set-environment DISPLAY=${display}` : "",
-                        flags["persist-to-env"] ? `sh -c 'export DISPLAY="${display}"' > ${flags["persist-to-env"]}` : "",
-                    ].filter(Boolean).join(" && ")
-                }`);
-                console.log(display);
-                process.exit(0);
+                out = bind(out, () => pure(true,
+                    `    [dry-run] ${
+                        [
+                            flags["persist-to-systemd"] ? `systemctl --user set-environment DISPLAY=${display}` : "",
+                            flags["persist-to-env"] ? `sh -c 'export DISPLAY="${display}"' > ${flags["persist-to-env"]}` : "",
+                        ].filter(Boolean).join(" && ")
+                    }`,
+                    display,
+                ));
+            } else {
+                const sd = flags["persist-to-systemd"]
+                    ? persistSystemd(display)
+                    : pure(true);
+                const env = flags["persist-to-env"]
+                    ? persistEnvFile(flags["persist-to-env"] as string, display)
+                    : pure(true);
+                out = bind(sd, (a) => bind(env, (b) => pure(a && b, display)));
             }
-            if (flags["persist-to-systemd"]) ok = persistSystemd(display) && ok;
-            if (flags["persist-to-env"]) ok = persistEnvFile(flags["persist-to-env"] as string, display) && ok;
+        } else {
+            out = bind(out, () => pure(true, display));
         }
-
-        console.log(display);
+        // [FLUSH-CLASS: exit] the buffered diagnostics + the display
+        // string flush here — stdout carries ONLY the display line last,
+        // then the exit code speaks
+        const ok = flush(out);
         process.exit(ok ? 0 : 1);
     },
 });

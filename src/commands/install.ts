@@ -11,28 +11,29 @@ import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
 import { checkDotsEnv, readRequires, missing } from "../lib/dots";
 import { resolvePackage, installed, scriptPath } from "../lib/deployScript";
-import { confirm, say } from "../lib/lines";
+import { say } from "../lib/lines";
+import { bind, flush, map, pure, tell, type Out } from "../lib/out";
 import { sudoPreauth } from "../lib/provisioners";
 
 const isInteractive = (): boolean => process.stdin.isTTY === true;
 
 
-export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Promise<number> {
+export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Promise<Out<number>> {
     const requires = await readRequires();
     const target = requires.target;
-    console.log(`target: ${target} (wm.depends)`);
+    // [FLUSH-CLASS: prompt] the sudo preauth below asks on the tty —
+    // the banner must be on the terminal before anything waits on input
+    flush(tell(`target: ${target} (wm.depends)`));
     // fail fast instead of hanging: a non-interactive run without --yes
     // can never answer the per-binary confirmations
     if (!dryRun && !yes && !isInteractive() && missing(requires.binaries).length > 0) {
-        say(
+        return pure(1,
             "deploy: non-interactive terminal without --yes — " +
             "the confirmation prompts would hang. Re-run with --yes " +
             "(or interactively).",
         );
-        return 1;
     }
 
-    let failed = 0;
     const wanted = only?.length ? requires.binaries.filter((b) => only.includes(b)) : requires.binaries;
     // the sudo grant is the FIRST interaction, before ANY output: the
     // walk's root operations (apt/pacman installs) must never prompt
@@ -43,30 +44,41 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
         `root access is required to install ${absentNow.length} missing requirement(s) via the deploy target's package manager (${absentNow.join(", ")})`,
         dryRun,
     ))) {
-        say("sudo: credentials not granted (refused, or no tty to prompt on) — run `sudo -v` first, or --dry-run to resolve only");
-        return 1;
+        return pure(1,
+            "sudo: credentials not granted (refused, or no tty to prompt on) — run `sudo -v` first, or --dry-run to resolve only",
+        );
     }
     // PHASE 1 — report + resolve every missing binary up front: the
     // batch installs ALL resolved packages in ONE package-manager
     // command (one sudo elevation, one apt/pacman run, ONE consent
     // gate — never a per-package prompt).
+    // [FLUSH-CLASS: buffered] the phase-1 report rides Out; it is
+    // flushed at the phase-2 exec boundary (before any child output
+    // could interleave) or returned for the handler's exit flush.
+    let report = pure(0);
     const plans: { binary: string; pkg: string }[] = [];
     for (const binary of wanted) {
         if (installed(binary)) {
-            console.log(`  ${binary.padEnd(20)} already installed`);
+            report = bind(report, (f) => pure(f, `  ${binary.padEnd(20)} already installed`));
             continue;
         }
         const res = await resolvePackage(target, binary);
         if (!res.ok) {
-            say(`  ${binary.padEnd(20)} UNRESOLVED`);
-            say(`  ${" ".repeat(20)} ${res.problem ?? ""}`);
-            failed += 1;
+            report = bind(report, (f) => pure(f + 1,
+                `  ${binary.padEnd(20)} UNRESOLVED`,
+                `  ${" ".repeat(20)} ${res.problem ?? ""}`,
+            ));
             continue;
         }
-        console.log(`  ${binary.padEnd(20)} MISSING (package: ${res.pkg})`);
-        plans.push({ binary, pkg: res.pkg });
+        report = bind(report, (f) => pure(f, `  ${binary.padEnd(20)} MISSING (package: ${res.pkg as string})`));
+        plans.push({ binary, pkg: res.pkg as string });
     }
-    if (dryRun || plans.length === 0) return failed;
+    if (dryRun || plans.length === 0) return report;
+
+    // [FLUSH-CLASS: exec] the phase-1 report lands NOW — the template
+    // resolution and the batch below run children with inherited
+    // stdio; queued lines would interleave out of order
+    let out: Out<number> = pure(flush(report));
 
     // PHASE 2 — the BATCH command. The deploy script owns the command
     // SHAPE (`install <binary>` prints it); resolve it once for the
@@ -82,11 +94,9 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
     const tmplCode = await tmplProc.exited;
     const tmpl = (await new Response(tmplProc.stdout).text()).trim();
     if (tmplCode !== 0 || !tmpl) {
-        for (const p of plans) {
-            say(`         FAILED: no install command for '${p.binary}' (${target}.deploy install)`);
-            failed += 1;
-        }
-        return failed;
+        const lines = plans.map((p) =>
+            `         FAILED: no install command for '${p.binary}' (${target}.deploy install)`);
+        return pure(out.value + plans.length, ...lines);
     }
     const base = tmpl.split(/\s+/).slice(0, -1);
     if (base.some((t) => t.endsWith("apt"))) base.push("-y");
@@ -94,19 +104,18 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
     const batchCmd = [...base, ...pkgs].join(" ");
 
     if (!yes) {
-        const ok = await confirm(
-            `         install ${pkgs.length} package(s) in one run (${pkgs.join(", ")})? [Y/n] `,
-        );
-        if (ok === "abort") {
-            say("         EOF (ctrl-d): stopped — nothing installed");
-            process.exit(130);
-        }
-        if (ok === "no") {
-            say(`         skipped — ${pkgs.length} package(s) stay missing`);
-            return failed + plans.length;
-        }
+        // CONSENT DOCTRINE (2026-11): the sudo preauth above IS the
+        // consent gate — the user typed the root password for exactly
+        // this install, and the batch runs -y/--noconfirm. Any FURTHER
+        // prompt after the grant is removed: every post-grant
+        // interaction is a freeze class (the line-reader + the sudo
+        // tty pump compete; see sudoPreauth's contract comment). A
+        // user who does not want the install answers the sudo prompt
+        // with ctrl-c, which aborts the walk before any work.
     }
-    console.log(`         running: ${batchCmd}`);
+    // [FLUSH-CLASS: exec] the command echo precedes the spawn so the
+    // transcript shows what owns the terminal next
+    flush(tell(`         running: ${batchCmd}`));
     // restore COOKED mode explicitly (see deployScript.runInstall — the
     // same frozen-prompt class): sudo/apt read the tty directly
     if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
@@ -116,19 +125,24 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
         stdout: "inherit", stderr: "inherit", stdin: "inherit",
     });
     const exit = await run.exited;
-    if (exit !== 0) say(`         install command exited ${exit} — re-verifying what landed`);
+    if (exit !== 0) {
+        out = bind(out, (f) => pure(f, `         install command exited ${exit} — re-verifying what landed`));
+    }
 
     // PHASE 3 — re-verify: EVERY planned binary must exist now (the
     // batch's hard-failure contract, per binary)
+    // [FLUSH-CLASS: buffered] the verdict lines accumulate; the
+    // handler's exit flush prints them (nothing runs after this).
+    const verdicts: string[] = [];
     for (const p of plans) {
         if (installed(p.binary)) {
-            console.log(`         installed: ${p.binary} (via ${p.pkg})`);
+            verdicts.push(`         installed: ${p.binary} (via ${p.pkg})`);
         } else {
-            say(`         FAILED: ${p.binary} still absent (package: ${p.pkg})`);
-            failed += 1;
+            verdicts.push(`         FAILED: ${p.binary} still absent (package: ${p.pkg})`);
+            out = map(out, (f) => f + 1);
         }
     }
-    return failed;
+    return pure(out.value, ...verdicts);
 }
 
 export default defineCommand({
@@ -149,17 +163,23 @@ export default defineCommand({
     handler: async ({ flags }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
+            // [FLUSH-CLASS: exit] precondition failure — the problem
+            // line is the whole transcript; exit code carries severity
             say(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
-        const failed = await walk(
+        const result = await walk(
             !!flags.yes, !!flags["dry-run"],
             flags.only?.split(/[,\s]+/).filter(Boolean),
         );
+        // [FLUSH-CLASS: exit] the walk's buffered verdict flushes here —
+        // after this point only the exit code speaks
+        const failed = flush(result);
         if (failed > 0) {
             say(`install: ${failed} requirement(s) unresolved`);
             process.exit(1);
         }
+        // [FLUSH-CLASS: exit] final line of the transcript
         console.log("install: all requirements satisfied");
         // EXPLICIT exit: the line-reader's stdin listener (lines.ts
         // attach) keeps the event loop alive on a TTY — stdin never

@@ -44,16 +44,22 @@ export function unitify(names: string[]): string[] {
 }
 
 /** run a services action over EXPLICIT unit names (no confirmation —
- * the caller owns it). Returns the failure count. */
+ * the caller owns it). Returns the failure count.
+ * [FLUSH-CLASS: buffered] shape kept (rule: the runner is shared with
+ * the `deploy` menu); the print sites below assert their classes. */
 export function runServicesAction(action: ServicesAction, units: string[]): number {
     let failed = 0;
     if (action === "check") {
         failed += run("systemctl --user daemon-reload");
         for (const unit of units) {
             const code = run(`systemctl --user enable --now --no-block ${unit}`);
+            // [FLUSH-CLASS: exec] UNBUFFERABLE: run() spawns inherit
+            // stdio — the failure line must land between children
             if (code !== 0) say(`services: failed to enable ${unit}`);
             failed += Math.min(code, 1);
         }
+        // [FLUSH-CLASS: exec] rides among the inherit-stdio systemctl
+        // children of this walk
         console.log(`services: enabled: ${units.join(" ")}`);
     } else if (action === "start") {
         failed += run("systemctl --user daemon-reload");
@@ -86,6 +92,9 @@ export function runServicesAction(action: ServicesAction, units: string[]): numb
         Bun.spawnSync(["sleep", "1"]);
     }
 
+    // [FLUSH-CLASS: exec] the status report sits inside the spawn walk
+    // (piped shOut probes + the sleep) and the caller shares this
+    // runner — kept printing, in order, exactly as before
     console.log(`services: ${action} submitted; current state:`);
     for (const unit of units) {
         const st = shOut(`systemctl --user is-active ${unit} 2>/dev/null`).out || "unknown";

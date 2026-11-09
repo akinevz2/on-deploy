@@ -120,6 +120,8 @@ function dryGuard(dry: boolean, what: string): boolean {
 function runAdapter(desc: PkgDescriptor, target: string, force: boolean): MakeResult {
     const vars: string[] = [];
     if (force) vars.push("FORCE=1");
+    // [FLUSH-CLASS: exec] stdio:inherit — the adapter's own make output
+    // interleaves on the real terminal; nothing of ours may be queued
     const r = Bun.spawnSync([
         "make", "-C", join(process.env.HOME!, "dots", desc.pkg), "--no-print-directory",
         "-f", `.local/share/depends/${desc.pkg}/Makefile`, target, ...vars,

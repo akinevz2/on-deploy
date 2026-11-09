@@ -20,6 +20,8 @@ export default defineCommand({
     handler: async ({ flags }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
+            // [FLUSH-CLASS: exit] precondition failure — the problem
+            // line is the whole transcript; exit code carries severity
             say(`on-deploy: ${env.problem}`);
             process.exit(2);
         }

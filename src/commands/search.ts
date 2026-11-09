@@ -11,6 +11,7 @@
 
 import { defineCommand, option } from "@bunli/core";
 import { say } from "../lib/lines";
+import { bind, flush, pure, type Out } from "../lib/out";
 import { z } from "zod";
 import { checkDotsEnv, readRequires, missing } from "../lib/dots";
 import { resolvePackage } from "../lib/deployScript";
@@ -30,6 +31,8 @@ export default defineCommand({
     handler: async ({ flags }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
+            // [FLUSH-CLASS: exit] precondition failure — the problem
+            // line is the whole transcript; exit code carries severity
             say(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
@@ -37,23 +40,29 @@ export default defineCommand({
         const wanted = flags.only?.length
             ? requires.binaries.filter((b) => flags.only!.split(/[,\s]+/).filter(Boolean).includes(b))
             : requires.binaries;
-        console.log(`search: target=${requires.target} binaries=${wanted.length}`);
-        let failed = 0;
+        // [FLUSH-CLASS: buffered] the header + per-binary verdicts ride
+        // an Out (resolvePackage spawns are piped — nothing interleaves);
+        // the handler's exit flush prints them in order
+        let out: Out<number> = pure(0, `search: target=${requires.target} binaries=${wanted.length}`);
         for (const binary of wanted) {
             const installedNow = !missing([binary]).length;
             if (installedNow && !flags.all) {
-                console.log(`  ${binary.padEnd(20)} installed (--all to resolve anyway)`);
+                out = bind(out, (f) => pure(f, `  ${binary.padEnd(20)} installed (--all to resolve anyway)`));
                 continue;
             }
             const res = await resolvePackage(requires.target, binary);
             if (res.ok) {
-                console.log(`  ${binary.padEnd(20)} -> ${res.pkg}`);
+                out = bind(out, (f) => pure(f, `  ${binary.padEnd(20)} -> ${res.pkg}`));
             } else {
-                console.log(`  ${binary.padEnd(20)} UNRESOLVED`);
-                console.log(`  ${" ".repeat(20)} ${res.problem ?? ""}`);
-                failed += 1;
+                out = bind(out, (f) => pure(f + 1,
+                    `  ${binary.padEnd(20)} UNRESOLVED`,
+                    `  ${" ".repeat(20)} ${res.problem ?? ""}`,
+                ));
             }
         }
+        // [FLUSH-CLASS: exit] the buffered verdicts flush here — after
+        // this point only the exit code speaks
+        const failed = flush(out);
         if (failed > 0) {
             say(`search: ${failed} binary/b unresolved`);
             process.exit(1);

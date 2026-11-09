@@ -63,6 +63,8 @@ export async function runInstall(target: string, binary: string): Promise<Instal
     // already, but sudo prompts read the tty; in even a leftover raw
     // mode the [sudo] password prompt has NO ECHO and the terminal
     // looks hung while the keystrokes go in blind.
+    // [FLUSH-CLASS: exec] this print IS the boundary — the child below
+    // inherits stdio and its output interleaves on the real terminal
     console.log(`         running: ${cmd}`);
     if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
         try {

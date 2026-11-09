@@ -21,6 +21,7 @@ import {
     type ServicesAction,
 } from "../lib/services";
 import { say } from "../lib/lines";
+import { flush, tell } from "../lib/out";
 
 export default defineCommand({
     name: "services",
@@ -40,6 +41,7 @@ export default defineCommand({
         const raw = positional[0] ?? "";
         const action = raw as ServicesAction;
         if (!SERVICES_ACTIONS.includes(action)) {
+            // [FLUSH-CLASS: exit] usage report — exit code carries severity
             say(`services: ${raw || "(no action)"} is not a services action`);
             say("services:\tusage\ton-deploy services <action> [--yes]");
             say("services:\thelp\ton-deploy services help");
@@ -47,6 +49,8 @@ export default defineCommand({
         }
         const order = readServiceOrder();
         if (order.length === 0) {
+            // [FLUSH-CLASS: exit] precondition failure — exit code
+            // carries severity
             say("services: empty or missing services.depends");
             process.exit(2);
         }
@@ -58,10 +62,14 @@ export default defineCommand({
         // bypasses; non-tty without --yes aborts (nothing hangs)
         if ((action === "start" || action === "stop" || action === "restart") && !yes) {
             if (!process.stdin.isTTY) {
+                // [FLUSH-CLASS: exit] abort report — exit code carries severity
                 say("services: non-interactive without --yes — aborting");
                 process.exit(1);
             }
-            console.log(`services: ${units.join(" ")}`);
+            // [FLUSH-CLASS: prompt] the unit list must be on the terminal
+            // BEFORE the stdin read below — buffering here would freeze
+            // the run with a silent, answerable question
+            flush(tell(`services: ${units.join(" ")}`));
             process.stdout.write(`services: continue with ${action}? [y/N] `);
             const line = await (async () => {
                 const dec = new TextDecoder();
@@ -72,7 +80,9 @@ export default defineCommand({
                 return "";
             })();
             if (line !== "y" && line !== "yes") {
-                console.log("services: cancelled");
+                // [FLUSH-CLASS: exit] cancellation is the whole
+                // transcript; the handler returns, nothing runs after
+                flush(tell("services: cancelled"));
                 return;
             }
         }

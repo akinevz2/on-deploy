@@ -2,6 +2,7 @@
 
 import { defineCommand, option } from "@bunli/core";
 import { say } from "../lib/lines";
+import { flush, tell } from "../lib/out";
 import { z } from "zod";
 import { checkDotsEnv, readRequires, missing, DOTS_DIR } from "../lib/dots";
 import { resolvePackage } from "../lib/deployScript";
@@ -103,23 +104,31 @@ export default defineCommand({
     handler: async ({ flags }) => {
         const env = checkDotsEnv();
         if (!env.ok) {
+            // [FLUSH-CLASS: exit] precondition failure — the problem
+            // line is the whole transcript; exit code carries severity
             say(`on-deploy: ${env.problem}`);
             process.exit(2);
         }
         const { rows, target } = await collect();
+        // [FLUSH-CLASS: buffered] the report is built as an Out — no
+        // spawn with inherited stdio runs after collect()
+        const lines: string[] = [];
         if (flags.json) {
-            console.log(JSON.stringify({ target, rows }, null, 2));
+            lines.push(JSON.stringify({ target, rows }, null, 2));
         } else {
-            console.log(`deploy target: ${target}`);
+            lines.push(`deploy target: ${target}`);
             for (const r of rows) {
                 const state = r.installed
                     ? (r.version ? `installed ${r.version}` : "installed")
                     : r.problem
                         ? `MISSING (${r.problem})`
                         : `MISSING -> ${r.pkg}`;
-                console.log(`  ${r.binary.padEnd(20)} ${state}`);
+                lines.push(`  ${r.binary.padEnd(20)} ${state}`);
             }
         }
+        // [FLUSH-CLASS: exit] the buffered report flushes here — after
+        // this point only the exit code speaks
+        flush(tell(...lines));
         process.exit(rows.some((r) => !r.installed) ? 1 : 0);
     },
 });

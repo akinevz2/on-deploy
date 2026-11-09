@@ -23,6 +23,7 @@ import {
 import { checkDotsEnv, DOTS_DIR, manifestPath, readRequires, readWmPackages } from "../lib/dots";
 import { readLine, say } from "../lib/lines";
 import { runApply } from "../lib/configureCore";
+import { flush } from "../lib/out";
 import { walk } from "./install";
 import {
     packagesWithMakefiles, printResults, pkgMakefile, runMakeSpun, stowPackages, stowPkg,
@@ -240,6 +241,8 @@ function validCredentials(name: string, email: string): string {
 async function promptCredentials(): Promise<{ name: string; email: string } | null> {
     if (existsSync(CRED_REPO) || existsSync(CRED_HOME)) return null;
     if (!process.stdin.isTTY) return null;
+    // [FLUSH-CLASS: prompt] everything this function prints must be on
+    // the terminal before readLine() waits — never buffer here
     console.log("configure: no git credentials on file (~/.my-credentials missing)");
     console.log("  the shell rc files load git identity from that file at startup —");
     console.log("  two lines: your full name, then your email.");
@@ -570,6 +573,9 @@ export default defineCommand({
             // pipes; the opentui one does not). A piped/captured run
             // keeps the recorded manifest and just gets the folded apply.
             const ttyMenu = process.stdin.isTTY && process.stdout.isTTY;
+            // [FLUSH-CLASS: exec] the flag-edit/quit/wizard prints below
+            // all order against the TUI drain (releaseTui → stdout
+            // history) or the runApply subprocess — none may queue
             if (!ttyMenu) {
                 console.log("configure: non-interactive — keeping the recorded configuration; applying it");
             }
@@ -610,9 +616,14 @@ export default defineCommand({
                     // the wizard's install confirms + sudo are LINE-READER
                     // flows; the raw-mode TUI session must step down first
                     await releaseTui();
+                    // [FLUSH-CLASS: exec] releaseTui() drains the TUI
+                    // history onto stdout — these banners must land in
+                    // that ordering, never queued behind it
                     console.log("wizard: tui released (cooked terminal)");
                     console.log("wizard: binaries");
-                    const failed = await walk(false, false);
+                    // [FLUSH-CLASS: exit] the walk's buffered verdict
+                    // flushes before the failure gate reads the value
+                    const failed = flush(await walk(false, false));
                     if (failed > 0) {
                         say(`wizard: ${failed} binary/b missing`);
                         process.exit(1);
@@ -667,6 +678,8 @@ export default defineCommand({
         }
 
         // warn when the target has no deploy script
+        // [FLUSH-CLASS: exec] the save report + apply banners order
+        // against runApply's subprocess output below
         const script = join(
             process.env.HOME!, ".local/bin/install", `${m.target}.deploy`,
         );

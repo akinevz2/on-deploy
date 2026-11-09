@@ -16,6 +16,7 @@ export async function pkgOpTui(op: Op, explicit: string[]): Promise<void> {
     let pkgs = explicit;
     if (pkgs.length === 0) {
         if (!process.stdin.isTTY || !process.stdout.isTTY) {
+            // [FLUSH-CLASS: exit] refusal report — exit code carries severity
             say(`${op}: no packages and no tty`);
             process.exit(2);
         }
@@ -31,6 +32,9 @@ export async function pkgOpTui(op: Op, explicit: string[]): Promise<void> {
         // painted menu (the broken-screen-on-submit class)
         await releaseTui();
         if (sel === null) {
+            // [FLUSH-CLASS: exec] UNBUFFERABLE: must land AFTER
+            // releaseTui() writes the TUI history to stdout, or the
+            // line interleaves into the still-draining buffer
             console.log(`${op}: cancelled`);
             return;
         }
@@ -38,6 +42,9 @@ export async function pkgOpTui(op: Op, explicit: string[]): Promise<void> {
     }
     const known = stowPackages();
     const unknown = pkgs.filter((p) => !known.includes(p));
+    // [FLUSH-CLASS: exec] these precede the per-package spawnSync walk
+    // (captured, piped children) — kept direct so the report is on the
+    // terminal before any child runs
     for (const p of unknown) console.log(`${op}: not a dots package: ${p}`);
     const targets = pkgs.filter((p) => known.includes(p));
 
@@ -51,6 +58,8 @@ export async function pkgOpTui(op: Op, explicit: string[]): Promise<void> {
         const selfIndex = targets.indexOf("on-deploy");
         if (selfIndex >= 0) {
             targets.splice(selfIndex, 1);
+            // [FLUSH-CLASS: exec] same pre-walk report class as the
+            // unknown-package lines above
             console.log("unstow: skipping on-deploy — it owns the running binary (list it explicitly to really unstow it)");
         }
     }
@@ -71,6 +80,9 @@ export async function pkgOpTui(op: Op, explicit: string[]): Promise<void> {
                 : { pkg, ok: true, lines: [`nothing to ${op}`] },
         );
     }
+    // [FLUSH-CLASS: exit] printResults (pkgops) prints the captured
+    // blocks once every child has exited; the exit code rides the
+    // result verdict — nothing spawns after this point
     printResults(results);
     if (results.some((r) => !r.ok)) process.exit(1);
 }
