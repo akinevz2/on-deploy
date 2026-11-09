@@ -19,7 +19,7 @@ import { say } from "../lib/lines";
 import { resolvePackage } from "../lib/deployScript";
 import {
     familyPkgManager, PKG_MANAGER_ID, PKG_OP,
-    targetPkg, targetPkgInstalled,
+    sudoPreauth, targetPkg, targetPkgInstalled,
     type PkgOpKind, type TargetFamily,
 } from "../lib/provisioners";
 
@@ -55,6 +55,16 @@ export default defineCommand({
         const family = target as TargetFamily | null;
         const pkgMgr = familyPkgManager(family) ?? PKG_MANAGER_ID.apt;
         const dry = !!flags["dry-run"];
+        // the sudo grant is the FIRST interaction (before any output):
+        // install/remove are root operations and must never prompt
+        // mid-run
+        if ((op === "install" || op === "remove") && !(await sudoPreauth(
+            `${op}ing ${names.length} package(s) (${names.join(", ")}) needs root — ${pkgMgr} ${op}`,
+            dry,
+        ))) {
+            say("sudo: credentials not granted (refused, or no tty to prompt on) — run `sudo -v` first, or --dry-run");
+            process.exit(1);
+        }
         let failed = 0;
 
         for (const name of names) {

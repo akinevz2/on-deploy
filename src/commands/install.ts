@@ -12,7 +12,8 @@ import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
 import { checkDotsEnv, readRequires, missing } from "../lib/dots";
 import { resolvePackage, runInstall, installed } from "../lib/deployScript";
-import { confirm , say } from "../lib/lines";
+import { confirm, say } from "../lib/lines";
+import { sudoPreauth } from "../lib/provisioners";
 
 const isInteractive = (): boolean => process.stdin.isTTY === true;
 
@@ -34,6 +35,18 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
 
     let failed = 0;
     const wanted = only?.length ? requires.binaries.filter((b) => only.includes(b)) : requires.binaries;
+    // the sudo grant is the FIRST interaction, before ANY output: the
+    // walk's root operations (apt/pacman installs) must never prompt
+    // mid-run — the pre-request happens on a clean tty here or the
+    // run aborts
+    const absentNow = wanted.filter((b) => !installed(b));
+    if (absentNow.length > 0 && !(await sudoPreauth(
+        `root access is required to install ${absentNow.length} missing requirement(s) via the deploy target's package manager (${absentNow.join(", ")})`,
+        dryRun,
+    ))) {
+        say("sudo: credentials not granted (refused, or no tty to prompt on) — run `sudo -v` first, or --dry-run to resolve only");
+        return 1;
+    }
     for (const binary of wanted) {
         if (installed(binary)) {
             console.log(`  ${binary.padEnd(20)} already installed`);

@@ -8,9 +8,8 @@
 // the caller's sudo is passwordless); dryRun prints instead of doing.
 
 import { existsSync, readdirSync } from "node:fs";
-import { say } from "../lib/lines";
+import { confirm, say } from "../lib/lines";
 import { join } from "node:path";
-import { confirm } from "./lines";
 
 export function sh(cmd: string, args: string[]): { code: number; out: string } {
     const r = Bun.spawnSync([cmd, ...args], { stdout: "pipe" });
@@ -26,6 +25,32 @@ export async function sudo(cmd: string, args: string[], dryRun: boolean): Promis
         stdout: "inherit", stderr: "inherit", stdin: "inherit",
     });
     return await p.exited;
+}
+
+/** PRE-REQUEST root credentials BEFORE any interactive surface (TUI,
+ * confirm prompts, walk output): the grant happens on a clean tty —
+ * nothing has attached a stdin pump yet, nothing has painted the
+ * screen — so the password prompt is the FIRST thing the user sees
+ * and every later root operation runs prompt-free (a mid-run sudo
+ * password read competes with the process's own stdin pump and
+ * freezes: the "make install hangs after [Y/n]" hang).
+ *
+ * `intent` is the concise declarative WHY (one line, printed only
+ * when a grant is actually needed). `sudo -n true` short-circuits a
+ * cached timestamp or passwordless sudo — zero noise then. Returns
+ * false when the grant cannot be made (refused, or no tty): callers
+ * MUST abort before doing any work, never proceed into a mid-run
+ * prompt. */
+export async function sudoPreauth(intent: string, dryRun: boolean): Promise<boolean> {
+    if (dryRun) return true;
+    if (process.getuid?.() === 0) return true;
+    if (sh("sudo", ["-n", "true"]).code === 0) return true;
+    if (!process.stdin.isTTY) return false;
+    say(`sudo: ${intent}`);
+    const p = Bun.spawn(["sudo", "-v"], {
+        stdout: "inherit", stderr: "inherit", stdin: "inherit",
+    });
+    return await p.exited === 0;
 }
 
 export interface Step {
