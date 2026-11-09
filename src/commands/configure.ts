@@ -24,6 +24,7 @@ import { checkDotsEnv, DOTS_DIR, manifestPath, readRequires, readWmPackages } fr
 import { readLine, say } from "../lib/lines";
 import { runApply } from "../lib/configureCore";
 import { flush } from "../lib/out";
+import { commitUserBranch, reportUserBranch } from "../lib/userBranch";
 import { walk } from "./install";
 import {
     packagesWithMakefiles, printResults, pkgMakefile, runMakeSpun, stowPackages, stowPkg,
@@ -35,6 +36,19 @@ import {
 import { tuiChecklist, tuiSelect, tuiText, tuiYesNo, releaseTui } from "../lib/tui";
 
 const KNOWN_TARGETS = ["ubuntu", "debian", "manjaro", "arch", "fedora"];
+
+// the CONFIG PATHS the user branch tracks (see lib/userBranch.ts): every
+// file configure may rewrite, repo-relative. .gitignore'd manifests are
+// staged with add -f --sparse; doftiles.conf rides along when dirty.
+const CONFIG_PATHS = [
+    "wm.depends", "stow.depends", "system.depends", "services.depends",
+    "depends/.config/doftiles.conf",
+];
+
+/** commit config changes onto the user branch (no-op when clean) */
+function commitConfig(): void {
+    reportUserBranch(commitUserBranch(DOTS_DIR, CONFIG_PATHS));
+}
 // the candidate catalog for the checklist (the current list is always
 // included and preselected)
 const CATALOG = [
@@ -592,6 +606,9 @@ export default defineCommand({
                     console.log("configure: quit — recorded configuration kept");
                     return;
                 }
+                // the saves are TRACKED: committed onto the user branch
+                // (tree stays clean — no skip-worktree, no stash dance)
+                commitConfig();
                 // the WIZARD: the saved configuration now drives the full
                 // deployment — binaries from the repos, each package's
                 // install rule, stow, then the deploy target apply.
@@ -689,6 +706,8 @@ export default defineCommand({
             );
         }
         writeManifest(m);
+        // the flag-path saves are TRACKED too (same user-branch commit)
+        commitConfig();
         console.log(`configure: target=${m.target} binaries=${m.binaries.join(" ")}`);
         for (const note of credNotes ?? []) {
             console.log(`configure: ${note}`);

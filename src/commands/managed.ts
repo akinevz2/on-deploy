@@ -40,6 +40,7 @@ import {
     type PkgDescriptor,
 } from "../lib/adapters";
 import { say } from "../lib/lines";
+import { commitUserBranch } from "../lib/userBranch";
 import { pkgMakefile, stowPkg, swapArtifact, unstowPkg } from "../lib/pkgops";
 import { lookupTransport } from "../lib/pkgmanagers";
 import { readRequires } from "../lib/dots";
@@ -218,6 +219,13 @@ export default defineCommand({
             if (dryGuard(args.dry, `conf-set ${desc.key}=${args.value}`)) return;
             confSet(desc.key, args.value);
             console.log(`  ${desc.pkg.padEnd(11)} ${desc.key}=${args.value}`);
+            // the deployment-method record is CONFIG: track it on the
+            // user branch the same way configure tracks manifests (the
+            // tree stays clean; make update rebases the branch)
+            const ub = commitUserBranch(join(process.env.HOME!, "dots"), [
+                "depends/.config/doftiles.conf",
+            ]);
+            for (const line of ub.lines) console.log(`  ${line}`);
             return;
         }
 
