@@ -108,14 +108,22 @@ export default defineCommand({
         // themes/syntaxes — are updated by UPSTREAM, not chased per
         // machine; remotes never re-pull sub-submodule churn.
         // `git submodule update --remote` must be run BY HAND to bump)
+        // MANIFEST-SCOPED: system.depends is the submodule manifest and
+        // the SOURCE OF TRUTH — only the configured paths are synced;
+        // a package dropped from the manifests is not chased here (its
+        // checkout stays local and untouched)
+        const subs = submodulesByPackage();
+        const configuredPaths = Object.values(subs).flat();
         if (!noSync) {
             if (dry) {
                 console.log("  [dry] submodule sync+pins");
+            } else if (configuredPaths.length === 0) {
+                console.log("depends: no submodules configured (system.depends is empty)");
             } else {
                 console.log("depends: submodule sync");
-                if (shInherit(["git", "submodule", "sync"], DOTS_DIR) !== 0) process.exit(1);
+                if (shInherit(["git", "submodule", "sync", "--", ...configuredPaths], DOTS_DIR) !== 0) process.exit(1);
                 console.log("depends: submodule pins");
-                if (shInherit(["git", "submodule", "update", "--init", "--recursive"], DOTS_DIR) !== 0) {
+                if (shInherit(["git", "submodule", "update", "--init", "--recursive", "--", ...configuredPaths], DOTS_DIR) !== 0) {
                     say("depends: submodule update FAILED");
                     process.exit(1);
                 }
@@ -126,7 +134,6 @@ export default defineCommand({
         // (submodule manifest), intersected with Makefile presence — a
         // package with submodules but no Makefile is a misconfiguration,
         // reported, not silently skipped
-        const subs = submodulesByPackage();
         let targets = Object.keys(subs)
             .filter((p) => depsMakefile(p) !== null)
             .sort();
