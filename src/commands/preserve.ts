@@ -12,12 +12,14 @@
 //	per-package prompts offer restore-or-keep (default keep);
 //	non-TTY defaults to keep without blocking.
 //	on-deploy preserve	(TTY, no branch flags)
-//	the CONFLICT RESOLVER UI: a bunli-native (opentui) checklist of
-//	packages with conflicts → per package, each conflicting file
-//	gets its own decision prompt — view the INLINE diff, open the
-//	full-screen SIDE-BY-SIDE diff viewer (TSX), keep the dots
-//	version, or adopt MY version into the repo. Files the user
-//	adopts land in the package tree (manifest records the
+//	the CONFLICT RESOLVER: plain terminal I/O, bare minimum — per
+//	package, per conflicting file, the INLINE unified diff is
+//	printed and ONE accept/reject line decides: y = adopt MY
+//	version into the repo (deploy keeps using it), enter/N = keep
+//	the dots version (mine is archived to the store). No TUI: the
+//	opentui event layer broke on submenu navigation (listener
+//	overriding); a printed diff + one prompt cannot break. Adopted
+//	files land in the package tree (the manifest records the
 //	decisions; committing the adoption stays a manual step —
 //	never auto-committed).
 //	on-deploy preserve <pkg> --adopt
@@ -26,9 +28,10 @@
 //	is REQUIRED (clean HEAD = the restore point).
 //	flags: --dry-run --yes/-y --keep --restore --store <dir>
 //
-// The store is XDG state (see lib/preserve.ts for the layout), outside
-// the repo. Nothing here is per-package: all behaviors are keyed off
-// the names GIVEN (same shape as archive/stow).
+// The store lives outside the repo under ~/.local/share/doftiles
+// (see lib/preserve.ts for the layout). Nothing here is per-package:
+// all behaviors are keyed off the names GIVEN (same shape as
+// archive/stow).
 
 import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
@@ -36,10 +39,8 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { checkDotsEnv, DOTS_DIR } from "../lib/dots";
 import { stowPackages } from "../lib/pkgops";
-import { confirm , say } from "../lib/lines";
+import { confirm, readLine, say } from "../lib/lines";
 import { preservePackage, scanConflicts, type Conflict, type PreserveOptions } from "../lib/preserve";
-import { showDiffView } from "../lib/diffview";
-import { tuiChecklist, tuiSelect } from "../lib/tui";
 
 /** the unified diff text (git diff --no-index, exit code 1 = DIFFERS) */
 function unifiedDiff(repoPath: string, homePath: string): string[] {
@@ -51,28 +52,21 @@ function unifiedDiff(repoPath: string, homePath: string): string[] {
     return out.split("\n").filter((l) => l !== "");
 }
 
-/** the per-file diff data for BOTH views, AT ONCE (the TSX viewer
- * toggles between them without recomputation) */
-function diffViews(repoPath: string, homePath: string) {
-    const cols = Math.max(80, process.stdout.columns ?? 100);
-    const page = Math.max(40, Math.floor(cols / 2) - 3);
-    const p = spawnSync(
-        "diff", ["-y", "--width", String(page), repoPath, homePath],
-        { encoding: "utf8" },
-    );
-    const side: { left: string; right: string }[] = [];
-    for (const row of (p.stdout ?? "").split("\n")) {
-        if (row === "") continue;
-        // `diff -y` puts its cset gutter (| < >) right after the width;
-        // split there so each half is a clean cell
-        const left = row.slice(0, page).trimEnd();
-        const right = row.slice(page + 1).trimEnd();
-        side.push({ left, right });
-    }
-    return { side, unified: unifiedDiff(repoPath, homePath) };
+/** the one decision per file: y = adopt (mine wins), enter/N = keep
+ * the dots version (mine archived); EOF (ctrl-d) aborts the run —
+ * never an implicit answer */
+async function adoptPrompt(): Promise<"adopt" | "dots" | "abort"> {
+    process.stdout.write("  adopt THIS file into the dots repo? [y/N] ");
+    const a = await readLine();
+    if (a === null) return "abort";
+    return /^(y|yes)$/i.test(a.trim()) ? "adopt" : "dots";
 }
 
-/** interactive conflict resolution — per package, per file */
+/** interactive conflict resolution — plain terminal I/O, bare minimum:
+ * per package, per file, the INLINE diff is printed and one
+ * accept/reject line decides. No TUI layer: the opentui event loop
+ * broke on submenu navigation (egregious listener overriding); a
+ * printed diff + one prompt cannot break. */
 async function resolveInteractive(pkgs: string[], opts: PreserveOptions): Promise<number> {
     const known = stowPackages();
     const unknown = pkgs.filter((p) => !known.includes(p));
@@ -80,7 +74,8 @@ async function resolveInteractive(pkgs: string[], opts: PreserveOptions): Promis
     const targets = pkgs.filter((p) => known.includes(p));
     if (targets.length === 0 && unknown.length > 0) process.exit(2);
 
-    // 1. scan everything first so the checklist can show counts
+    // 1. scan everything first: clean packages deploy at once, the
+    // conflicted ones are resolved file by file below
     interface Group { pkg: string; hard: Conflict[]; conflicts: Conflict[] }
     const groups: Group[] = [];
     for (const pkg of targets) {
@@ -98,74 +93,35 @@ async function resolveInteractive(pkgs: string[], opts: PreserveOptions): Promis
         for (const l of r.lines) console.log(l);
     }
 
+    // 2. the conflicted packages, file by file: print the inline diff,
+    // one accept/reject per file
     let worst = 0;
-    if (groups.length === 0) return 0;
-
-    // 2. package-level checklist
-    const chosen = await tuiChecklist<string>(
-        "preserve — packages with conflicts; select the ones to resolve now:",
-        groups.map((g) => ({
-            label: g.pkg,
-            value: g.pkg,
-            hint: g.hard.length > 0
-                ? `${g.hard.length} HARD (directories; skip and fix by hand)`
-                : `${g.conflicts.length} file(s)`,
-        })),
-        { preselect: groups.map((g) => g.pkg) },
-    );
-    if (chosen === null) {
-        console.log("preserve: cancelled — nothing staged; deploying the clean packages only");
-        return worst;
-    }
-
-    // 3. per-file resolutions
-    for (const pkg of chosen) {
-        const group = groups.find((g) => g.pkg === pkg)!;
+    for (const group of groups) {
+        const { pkg } = group;
         if (group.hard.length > 0) {
-            console.log(`preserve ${pkg}: hard conflicts skipped (resolve by hand):`);
-            for (const c of group.hard) console.log(`  ${c.homePath} (directory where the package needs a file)`);
+            console.log(`preserve ${pkg}: HARD conflicts skipped (a directory where the package needs a file — resolve by hand):`);
+            for (const c of group.hard) console.log(`  ${c.homePath}`);
             worst = Math.max(worst, 1);
         }
-        const resolvable = group.conflicts;
-        if (resolvable.length === 0) continue;
+        if (group.conflicts.length === 0) continue;
         const dotsWins: Conflict[] = [];
         const mineWins: Conflict[] = [];
-        for (const c of resolvable) {
+        for (const c of group.conflicts) {
             const kind = c.kind === "file" ? `${c.bytes ?? "?"}B` : c.kind;
-            // build both diff texts ONCE per file (the TSX viewer and
-            // the inline fallback share them)
-            let viewer: { side: { left: string; right: string }[]; unified: string[] } | null = null;
-            const repoPath = join(DOTS_DIR, pkg, c.rel);
-            for (;;) {
-                const a = await tuiSelect<string>(`${c.rel} (${kind}) — resolve how?`, [
-                    { label: "keep the DOTS version (mine goes to the XDG store)", value: "dots", hint: "default (enter)" },
-                    { label: "adopt MY version into the repo (deploy keeps using it)", value: "mine" },
-                    { label: "view side-by-side diff (full screen)", value: "side" },
-                    { label: "view inline diff", value: "inline" },
-                    { label: "cancel — skip this file and the rest of the package", value: "cancel" },
-                ]);
-                if (a === null) break; // cancel: skip the whole package
-                if (a === "side" || a === "inline") {
-                    if (!viewer) viewer = diffViews(repoPath, c.homePath);
-                    try {
-                        await showDiffView({ rel: c.rel, side: viewer.side, unified: viewer.unified });
-                    } catch (err) {
-                        // fallback: inline (unified colors are re-colored by flag, so plain)
-                        console.log(
-                            `--- ${c.rel}\n${viewer.unified.join("\n")}`,
-                        );
-                        console.log(`preserve: diff rendering failed (${(err as Error).message}); unified diff printed above`);
-                    }
-                    continue; // decision loop resumes
-                }
-                if (a === "dots") { dotsWins.push(c); break; }
-                if (a === "mine") { mineWins.push(c); break; }
-                break; // cancel: leave the rest unresolved
+            const diff = unifiedDiff(join(DOTS_DIR, pkg, c.rel), c.homePath);
+            console.log(`\n===== ${c.rel} (${kind}) — dots version vs deployed ($HOME) =====`);
+            if (diff.length > 0) {
+                for (const l of diff) console.log(l);
+            } else {
+                console.log("  (no textual diff — binary content or already identical)");
             }
-        }
-        if (dotsWins.length === 0 && mineWins.length === 0) {
-            console.log(`preserve ${pkg}: no decisions — left untouched`);
-            continue;
+            const a = await adoptPrompt();
+            if (a === "abort") {
+                console.log("preserve: EOF (ctrl-d) — stopped; undecided files stay untouched");
+                process.exit(130);
+            }
+            if (a === "adopt") mineWins.push(c);
+            else dotsWins.push(c);
         }
         const r = await preservePackage(pkg, { ...opts, yes: true, keep: true, dotsWins, mineWins });
         for (const l of r.lines) console.log(l);
@@ -211,21 +167,10 @@ export default defineCommand({
         let pkgs = positional.filter(Boolean);
         if (flags.only) pkgs = flags.only.split(/[,\s]+/).filter(Boolean);
         if (pkgs.length === 0) {
-            if (!process.stdin.isTTY) {
-                say("preserve: no packages and no tty");
-                say("preserve: usage: on-deploy preserve <pkg>|--only <pkgs> [--adopt] [--restore] [--keep] [--dry-run]");
-                process.exit(2);
-            }
-            const all = stowPackages();
-            const sel = await tuiChecklist<string>(
-                "preserve — select packages",
-                all.map((l) => ({ label: l, value: l })),
-            );
-            if (sel === null) {
-                console.log("preserve: cancelled");
-                process.exit(130);
-            }
-            pkgs = sel;
+            say("preserve: no packages given — available dots packages:");
+            say(`preserve:\t${stowPackages().join(" ")}`);
+            say("preserve:\tusage\ton-deploy preserve <pkg>|--only <pkgs> [--adopt] [--keep] [--restore] [--dry-run]");
+            process.exit(2);
         }
 
         const opts: PreserveOptions = {
