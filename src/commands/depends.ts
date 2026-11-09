@@ -16,7 +16,7 @@
 //	HAND when a pinned tree is to be advanced). --no-sync skips the
 //	git phase (re-running builds without touching the checkouts).
 //	2. DRIVE — every stow package that ships the per-package Makefile
-//	dots/<pkg>/.local/state/depends/<pkg>.Makefile gets the rule the
+//	dots/<pkg>/.local/share/depends/<pkg>/Makefile gets the rule the
 //      depth asks for: `build` (--build) or `install` (--install). ALL
 //	the build/install/link logic lives in those Makefiles —
 //	on-deploy hardcodes nothing per package (--force passes FORCE=1;
@@ -123,7 +123,7 @@ export default defineCommand({
         }
 
         // 2) DRIVE — CONFIGURED SCOPE: the packages system.depends lists
-        // (submodule manifest), intersected with .Makefile presence — a
+        // (submodule manifest), intersected with Makefile presence — a
         // package with submodules but no Makefile is a misconfiguration,
         // reported, not silently skipped
         const subs = submodulesByPackage();
@@ -131,12 +131,12 @@ export default defineCommand({
             .filter((p) => depsMakefile(p) !== null)
             .sort();
         for (const p of Object.keys(subs)) {
-            if (!depsMakefile(p)) console.log(`depends: ${p}: no Makefile`);
+            if (!depsMakefile(p)) console.log(`depends: ${p}: depends/${p}/Makefile not found`);
         }
         if (flags.only) {
             const wanted = flags.only.split(/[,\s]+/).filter(Boolean);
             const unknown = wanted.filter((p) => !targets.includes(p));
-            for (const p of unknown) console.log(`depends: ${p}: no depends Makefile`);
+            for (const p of unknown) console.log(`depends: ${p}: depends/${p}/Makefile not found`);
             targets = targets.filter((p) => wanted.includes(p));
         }
         if (!mode || targets.length === 0) {

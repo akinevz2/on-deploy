@@ -1,12 +1,12 @@
 // src/lib/adapters.ts — the PACKAGE ADAPTER consultation layer.
 //
-// The dots package adapters (dots/<pkg>/.local/state/depends/
-// <pkg>.Makefile — the "router-Makefile" of the 2026-11 scheme)
+// The dots package adapters (dots/<pkg>/.local/share/depends/<pkg>/
+// Makefile — the "router-Makefile" of the 2026-11 scheme)
 // declare what is genuinely PACKAGE-SPECIFIC, one config item per
 // recipe, chained by the `metadata` target:
 //
-//   on-deploy consults them with `make -C dots/<pkg> -f <pkg>.Makefile
-//   metadata` and reads key=value lines:
+//   on-deploy consults them with `make -C dots/<pkg>
+//   -f .local/share/depends/<pkg>/Makefile metadata` and reads key=value lines:
 //
 //	git_repo=<url>	the upstream repository (the sources)
 //	pkg_name=<name>	the submodule package name; the checkout
@@ -67,7 +67,7 @@ export interface PkgDescriptor {
 }
 
 export function hasMakefile(pkg: string): boolean {
-    return existsSync(join(DOTS, pkg, ".local", "state", "depends", `${pkg}.Makefile`));
+    return existsSync(join(DOTS, pkg, ".local", "share", "depends", pkg, "Makefile"));
 }
 
 // ── safe property helpers (one per descriptor field; each helper
@@ -169,13 +169,13 @@ export function consult(pkg: string): PkgDescriptor {
     const raw: Record<string, string> = {};
     let ok = true;
     let problem: string | undefined;
-    if (!hasMakefile(pkg)) problem = "no adapter (dots/<pkg>/.local/state/depends/<pkg>.Makefile)";
+    if (!hasMakefile(pkg)) problem = "depends/<pkg>/Makefile not found (dots/<pkg>/.local/share/depends/<pkg>/Makefile)";
     if (problem) ok = false;
 
     if (ok) {
         const r = Bun.spawnSync([
             "make", "-C", join(DOTS, pkg), "--no-print-directory",
-            "-f", `.local/state/depends/${pkg}.Makefile`, "metadata",
+            "-f", `.local/share/depends/${pkg}/Makefile`, "metadata",
         ], { stdout: "pipe", stderr: "pipe" });
         const out = `${r.stdout ?? ""}`;
         if ((r.exitCode ?? 1) !== 0) {

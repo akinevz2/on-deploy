@@ -47,7 +47,7 @@ on-deploy carries **zero per-package code**: no hardcoded package
 names, no hardcoded behaviors. It knows platforms (debian-wsl |
 debian | archlinux) and performs generic operations. All per-package
 special steps live in the package Makefiles
-(`dots/<pkg>/.local/state/depends/<pkg>.Makefile`), which defer to
+(`dots/<pkg>/.local/share/depends/<pkg>/Makefile`), which defer to
 `on-deploy pkg` for platform package-manager work.
 
 ## How it runs in practice

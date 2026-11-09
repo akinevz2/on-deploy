@@ -122,7 +122,7 @@ function runAdapter(desc: PkgDescriptor, target: string, force: boolean): MakeRe
     if (force) vars.push("FORCE=1");
     const r = Bun.spawnSync([
         "make", "-C", join(process.env.HOME!, "dots", desc.pkg), "--no-print-directory",
-        "-f", `.local/state/depends/${desc.pkg}.Makefile`, target, ...vars,
+        "-f", `.local/share/depends/${desc.pkg}/Makefile`, target, ...vars,
     ], { stdout: "inherit", stderr: "inherit", stdin: "inherit" });
     return { ok: (r.exitCode ?? 1) === 0, lines: [] };
 }
@@ -158,7 +158,7 @@ export default defineCommand({
         const family: string | null = target ?? null;
         if (!pkgMakefile(pkg)) {
             say(`managed: ${pkg}: no adapter`);
-            say(`managed:\tabsent\tdots/${pkg}/.local/state/depends/${pkg}.Makefile`);
+            say(`managed:\tabsent\tdots/${pkg}/.local/share/depends/${pkg}/Makefile`);
             process.exit(2);
         }
         const consultDesc = consult(pkg);

@@ -27,25 +27,17 @@ export function stowPackages(): string[] {
 
 /**
  * the per-package dependency Makefile, at the 2026-11 depends scheme:
- *	dots/<pkg>/.local/state/depends/<pkg>.Makefile	(the stow package
- *     hosts its submodules' build/link/install recipes; run with -f)
- * or, as a fallback for packages NOT yet migrated (e.g. polybar's
- * bar-control Makefile), the legacy hook directory:
- *	dots/<pkg>/.local/share/<pkg>/Makefile
+ *	dots/<pkg>/.local/share/depends/<pkg>/Makefile	(the stow package
+ *     hosts its submodules' build/link/install recipes; one directory
+ *     per installed package, so the stowed $HOME sees
+ *     ~/.local/share/depends/<pkg>/Makefile)
  * Returns { dir, file } where dir is the `make -C` cwd and file the
  * repo-relative makefile to run.
  */
 export function pkgMakefile(pkg: string): { dir: string; file: string } | null {
     const dir = join(DOTS, pkg);
-    const stateFile = join(dir, ".local", "state", "depends", `${pkg}.Makefile`);
-    if (existsSync(stateFile)) {
-        return { dir, file: join(".local", "state", "depends", `${pkg}.Makefile`) };
-    }
-    const shareDir = join(dir, ".local", "share", pkg);
-    if (existsSync(join(shareDir, "Makefile"))) {
-        return { dir: shareDir, file: "Makefile" };
-    }
-    return null;
+    const file = join(dir, ".local", "share", "depends", pkg, "Makefile");
+    return existsSync(file) ? { dir, file: join(".local", "share", "depends", pkg, "Makefile") } : null;
 }
 
 export function hasMakefile(pkg: string): boolean {
@@ -54,9 +46,9 @@ export function hasMakefile(pkg: string): boolean {
 
 /** the depends-scheme Makefile of a package (the per-submodule
  *  sync/build/link/install recipes on-deploy `depends` drives) —
- * dots/<pkg>/.local/state/depends/<pkg>.Makefile, or null */
+ * dots/<pkg>/.local/share/depends/<pkg>/Makefile, or null */
 export function depsMakefile(pkg: string): string | null {
-    const file = join(DOTS, pkg, ".local", "state", "depends", `${pkg}.Makefile`);
+    const file = join(DOTS, pkg, ".local", "share", "depends", pkg, "Makefile");
     return existsSync(file) ? file : null;
 }
 

@@ -15,7 +15,7 @@
 // NEW (2026-11):
 //	toolchain — language toolchains (--bun/--rustup; --check fail-fast)
 //	depends	— sync the dots submodules + drive the per-package
-//	dots/<pkg>/.local/state/depends/<pkg>.Makefile rules
+//	dots/<pkg>/.local/share/depends/<pkg>/Makefile rules
 //	(build/install depth).
 //	detect-server — the shared X display probe; --persist-to-systemd
 //	exports DISPLAY to the systemd user manager (the

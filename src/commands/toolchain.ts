@@ -1,5 +1,5 @@
 // src/commands/toolchain.ts — LANGUAGE TOOLCHAIN management. The
-// per-package Makefiles (dots/<pkg>/.local/state/depends/<pkg>.Makefile)
+// per-package Makefiles (dots/<pkg>/.local/share/depends/<pkg>/Makefile)
 // own the build/install steps; the LANGUAGE they build with is a
 // system concern: on-deploy installs + verifies it here.
 //
