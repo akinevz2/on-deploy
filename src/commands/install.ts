@@ -1,17 +1,16 @@
 // src/commands/install.ts — verb (c): install missing required binaries
-// from the target repositories. For every MISSING binary: resolve the
-// package (search), show the install command, confirm (unless --yes),
-// run it with inherited stdio (sudo may prompt), then RE-VERIFY — a
-// binary still missing after its install command is a hard failure.
-// For every MISSING binary: resolve the package, show the install
-// command, confirm (unless --yes), run it with inherited stdio
-// (sudo may prompt), then RE-VERIFY — a binary still missing after
-// its install command is a hard failure for the run.
+// from the target repositories, BATCHED: resolve every missing binary
+// up front, then run ONE package-manager command for the whole deduped
+// package set (one sudo elevation, one apt/pacman invocation, ONE
+// consent gate — skipped entirely under --yes; the package manager
+// itself runs -y/--noconfirm once consent is given). Re-verify EVERY
+// planned binary afterwards — one still missing after the batch is a
+// hard failure for the run.
 
 import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
 import { checkDotsEnv, readRequires, missing } from "../lib/dots";
-import { resolvePackage, runInstall, installed } from "../lib/deployScript";
+import { resolvePackage, installed, scriptPath } from "../lib/deployScript";
 import { confirm, say } from "../lib/lines";
 import { sudoPreauth } from "../lib/provisioners";
 
@@ -47,6 +46,11 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
         say("sudo: credentials not granted (refused, or no tty to prompt on) — run `sudo -v` first, or --dry-run to resolve only");
         return 1;
     }
+    // PHASE 1 — report + resolve every missing binary up front: the
+    // batch installs ALL resolved packages in ONE package-manager
+    // command (one sudo elevation, one apt/pacman run, ONE consent
+    // gate — never a per-package prompt).
+    const plans: { binary: string; pkg: string }[] = [];
     for (const binary of wanted) {
         if (installed(binary)) {
             console.log(`  ${binary.padEnd(20)} already installed`);
@@ -60,32 +64,67 @@ export async function walk(yes: boolean, dryRun: boolean, only?: string[]): Prom
             continue;
         }
         console.log(`  ${binary.padEnd(20)} MISSING (package: ${res.pkg})`);
-        if (dryRun) continue;
+        plans.push({ binary, pkg: res.pkg });
+    }
+    if (dryRun || plans.length === 0) return failed;
 
-        if (!yes) {
-            const ok = await confirm(`         install ${res.pkg}? [Y/n] `);
-            if (ok === "abort") {
-                say(`         EOF (ctrl-d): stopped — ${binary} unresolved`);
-                process.exit(130);
-            }
-            if (ok === "no") {
-                say(`         skipped — ${binary} stays missing`);
-                failed += 1;
-                continue;
-            }
-        }
-        const inst = await runInstall(target, binary);
-        if (!inst.ok) {
-            say(`         FAILED: ${inst.problem ?? inst.command}`);
+    // PHASE 2 — the BATCH command. The deploy script owns the command
+    // SHAPE (`install <binary>` prints it); resolve it once for the
+    // first planned binary and swap the trailing package token for the
+    // whole deduped batch. Consent is ONE gate (skipped under --yes);
+    // once consent is given the package manager runs
+    // non-interactively (-y / --noconfirm) so it never re-asks.
+    const pkgs = [...new Set(plans.map((p) => p.pkg))];
+    const tmplProc = Bun.spawn(
+        [scriptPath(target), "install", plans[0].binary],
+        { stdout: "pipe", stderr: "ignore" },
+    );
+    const tmplCode = await tmplProc.exited;
+    const tmpl = (await new Response(tmplProc.stdout).text()).trim();
+    if (tmplCode !== 0 || !tmpl) {
+        for (const p of plans) {
+            say(`         FAILED: no install command for '${p.binary}' (${target}.deploy install)`);
             failed += 1;
-            continue;
         }
-        // re-verify: the install command ran; the binary must exist now
-        if (installed(binary)) {
-            console.log(`         installed: ${inst.command}`);
+        return failed;
+    }
+    const base = tmpl.split(/\s+/).slice(0, -1);
+    if (base.some((t) => t.endsWith("apt"))) base.push("-y");
+    else if (base.some((t) => t.endsWith("pacman"))) base.push("--noconfirm");
+    const batchCmd = [...base, ...pkgs].join(" ");
+
+    if (!yes) {
+        const ok = await confirm(
+            `         install ${pkgs.length} package(s) in one run (${pkgs.join(", ")})? [Y/n] `,
+        );
+        if (ok === "abort") {
+            say("         EOF (ctrl-d): stopped — nothing installed");
+            process.exit(130);
+        }
+        if (ok === "no") {
+            say(`         skipped — ${pkgs.length} package(s) stay missing`);
+            return failed + plans.length;
+        }
+    }
+    console.log(`         running: ${batchCmd}`);
+    // restore COOKED mode explicitly (see deployScript.runInstall — the
+    // same frozen-prompt class): sudo/apt read the tty directly
+    if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
+        try { process.stdin.setRawMode(false); } catch { /* not in raw mode */ }
+    }
+    const run = Bun.spawn(["sh", "-c", batchCmd], {
+        stdout: "inherit", stderr: "inherit", stdin: "inherit",
+    });
+    const exit = await run.exited;
+    if (exit !== 0) say(`         install command exited ${exit} — re-verifying what landed`);
+
+    // PHASE 3 — re-verify: EVERY planned binary must exist now (the
+    // batch's hard-failure contract, per binary)
+    for (const p of plans) {
+        if (installed(p.binary)) {
+            console.log(`         installed: ${p.binary} (via ${p.pkg})`);
         } else {
-            say(`         FAILED: ${binary} still absent`);
-            say(`         ran: ${inst.command}`);
+            say(`         FAILED: ${p.binary} still absent (package: ${p.pkg})`);
             failed += 1;
         }
     }
