@@ -10,7 +10,7 @@ import { dirname, join } from "node:path";
 import { manifestPath } from "./dots";
 
 export const DOTS = join(process.env.HOME!, "dots");
-export const STOW_STATE = join(process.env.HOME!, ".local/state/doftiles/stowed");
+export const STOW_STATE = join(process.env.HOME!, ".local/share/doftiles/stowed");
 
 /** stow packages = top-level dirs with .config or .local content */
 export function stowPackages(): string[] {

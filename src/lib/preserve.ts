@@ -22,9 +22,9 @@
 //	4. user reviews via git diff; keep (suggested git add/commit, never
 //        auto-committed) or revert via `git checkout HEAD -- <pkg>`
 //
-// The store lives at ~/.local/state/doftiles/preserve/<pkg>/ — XDG state,
-// outside the repo (zero commit/push risk), next to the existing
-// ~/.local/state/doftiles/stowed. Storage layout mirrors the package's
+// The store lives at ~/.local/share/doftiles/preserve/<pkg>/ — outside the
+// repo (zero commit/push risk), next to the existing
+// ~/.local/share/doftiles/stowed. Storage layout mirrors the package's
 // relpaths, plus a PRESERVE.json manifest per package. Pure functions take
 // `home` explicitly (better testability than defaults.ts' module-level
 // HOME); the stow/git spawns are injectable via explicit args so the
@@ -68,7 +68,7 @@ export interface ScanResult {
 // store layout
 // ---------------------------------------------------------------------------
 
-/** the preserve store root: ~/.local/state/doftiles/preserve/ */
+/** the preserve store root: ~/.local/share/doftiles/preserve/ */
 export function storeRoot(home: string): string {
     return join(home, ".local", "state", "doftiles", PRESERVE_STORE_NAME);
 }
@@ -278,7 +278,7 @@ export interface PreserveOptions {
     restore: boolean;
     /** --adopt flow ("mine wins") instead of the default ("dots wins") */
     adopt: boolean;
-    /** override store root (default: ~/.local/state/doftiles/preserve) */
+    /** override store root (default: ~/.local/share/doftiles/preserve) */
     store?: string;
     /** per-file decisions from the interactive resolver (mixed mode):
      * archive+remove the dots-wins files (default semantics), copy the

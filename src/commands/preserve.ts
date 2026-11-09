@@ -7,7 +7,7 @@
 //	non-interactive (falls back automatically when the flags pick
 //	a branch), or when no conflicts exist: the ARCHIVE-FIRST
 //         flow ("dots wins") — conflicts are copied into
-//	~/.local/state/doftiles/preserve/<pkg>/, removed from $HOME,
+//	~/.local/share/doftiles/preserve/<pkg>/, removed from $HOME,
 //         then `stow -R` deploys the dots version. TTY interactive
 //	per-package prompts offer restore-or-keep (default keep);
 //	non-TTY defaults to keep without blocking.
@@ -198,7 +198,7 @@ export default defineCommand({
             description: "skip the prompt; restore stored user content (or revert to dots in --adopt mode)",
         }),
         store: option(z.string().optional(), {
-            description: "override the store root (default ~/.local/state/doftiles/preserve)",
+            description: "override the store root (default ~/.local/share/doftiles/preserve)",
         }),
     },
     handler: async ({ flags, positional }) => {
