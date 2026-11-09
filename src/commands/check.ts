@@ -4,7 +4,7 @@ import { defineCommand, option } from "@bunli/core";
 import { say } from "../lib/lines";
 import { z } from "zod";
 import { checkDotsEnv, readRequires, missing, DOTS_DIR } from "../lib/dots";
-import { resolvePackage, scriptPath } from "../lib/deployScript";
+import { resolvePackage } from "../lib/deployScript";
 
 /**
  * The distro package version for an installed binary, queried via the
@@ -26,18 +26,7 @@ export interface CheckRow {
     /** the binary's own --version answer (semantic version extracted) */
     version?: string;
     pkg?: string;
-    installCommand?: string;
     problem?: string;
-}
-
-/** The would-be install command (the deploy script only PRINTS it). */
-async function previewInstall(target: string, binary: string): Promise<string | undefined> {
-    const proc = Bun.spawn([scriptPath(target), "install", binary], {
-        stdout: "pipe", stderr: "ignore",
-    });
-    const code = await proc.exited;
-    const out = (await new Response(proc.stdout).text()).trim();
-    return code === 0 ? out : undefined;
 }
 
 export async function collect(): Promise<{ rows: CheckRow[]; target: string }> {
@@ -89,12 +78,15 @@ export async function collect(): Promise<{ rows: CheckRow[]; target: string }> {
             }
             const res = await resolvePackage(requires.target, binary);
             if (res.ok) {
-                return {
-                    binary,
-                    installed: false,
-                    pkg: res.pkg,
-                    installCommand: await previewInstall(requires.target, binary),
-                };
+                // ONE deploy-script spawn per missing binary: the
+                // resolution. The would-be install command is NOT
+                // previewed through a second spawn — the walk
+                // (commands/install.ts) resolves the command itself
+                // when it actually installs; here the pkg name is the
+                // display's whole need. The script costs ~0.6s per
+                // call (apt-cache search) — doubled spawns were the
+                // dominant `make status` cost.
+                return { binary, installed: false, pkg: res.pkg };
             }
             return { binary, installed: false, problem: res.problem };
         }),

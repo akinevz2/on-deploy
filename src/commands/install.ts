@@ -122,5 +122,10 @@ export default defineCommand({
             process.exit(1);
         }
         console.log("install: all requirements satisfied");
+        // EXPLICIT exit: the line-reader's stdin listener (lines.ts
+        // attach) keeps the event loop alive on a TTY — stdin never
+        // EOFs there, and a fall-off-the-end handler hung the walk
+        // forever after its final line (the make-install hang)
+        process.exit(0);
     },
 });
