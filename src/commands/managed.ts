@@ -38,6 +38,7 @@ import {
     consult, confGet, confSet, deployedAlready, deployedState, methodSupported,
     registryTransportInstalled,
     type PkgDescriptor,
+    dotsRoot, dotsMakeVars,
 } from "../lib/adapters";
 import { say } from "../lib/lines";
 import { commitUserBranch } from "../lib/userBranch";
@@ -119,12 +120,12 @@ function dryGuard(dry: boolean, what: string): boolean {
 
 /** run one adapter recipe (1 shell-out; the adapters are plain) */
 function runAdapter(desc: PkgDescriptor, target: string, force: boolean): MakeResult {
-    const vars: string[] = [];
+    const vars: string[] = [...dotsMakeVars(desc.pkg)];
     if (force) vars.push("FORCE=1");
     // [FLUSH-CLASS: exec] stdio:inherit — the adapter's own make output
     // interleaves on the real terminal; nothing of ours may be queued
     const r = Bun.spawnSync([
-        "make", "-C", join(process.env.HOME!, "dots", desc.pkg), "--no-print-directory",
+        "make", "-C", join(dotsRoot(), desc.pkg), "--no-print-directory",
         "-f", `.local/share/depends/${desc.pkg}/Makefile`, target, ...vars,
     ], { stdout: "inherit", stderr: "inherit", stdin: "inherit" });
     return { ok: (r.exitCode ?? 1) === 0, lines: [] };
@@ -231,7 +232,7 @@ export default defineCommand({
 
         if (op === "status") {
             const registryCovered = desc.artifact
-                ? !existsSync(join(process.env.HOME!, "dots", desc.artifact))
+                ? !existsSync(join(dotsRoot(), desc.artifact))
                 : true;
             let registryOk = false;
             if (registryCovered) {
@@ -239,8 +240,8 @@ export default defineCommand({
                     if (registryTransportInstalled(id, desc.installName)) { registryOk = true; break; }
                 }
             }
-            const art = desc.artifact ? existsSync(join(process.env.HOME!, "dots", desc.artifact)) : false;
-            const subOk = desc.subDir ? existsSync(join(process.env.HOME!, "dots", desc.subDir)) : true;
+            const art = desc.artifact ? existsSync(join(dotsRoot(), desc.artifact)) : false;
+            const subOk = desc.subDir ? existsSync(join(dotsRoot(), desc.subDir)) : true;
             // query the installed binary for its version (extracting the
             // semantic version from whatever banner it prints); falls
             // back to bare "installed" when the binary can't answer —
@@ -311,7 +312,7 @@ export default defineCommand({
             }
             // landed: stow + swap ONLY where the adapter really placed
             // a dots artifact (registry adapters do not)
-            if (desc.artifact && existsSync(join(process.env.HOME!, "dots", desc.artifact))) {
+            if (desc.artifact && existsSync(join(dotsRoot(), desc.artifact))) {
                 swapArtifact(desc.installName);
                 stowPkg(desc.pkg);
             }
@@ -329,7 +330,7 @@ export default defineCommand({
                 process.exit(2);
             }
             const src = join(process.env.HOME!, "dots", desc.subDir!, desc.buildOutput);
-            const dest = join(process.env.HOME!, "dots", desc.artifact);
+            const dest = join(dotsRoot(), desc.artifact);
             if (dryGuard(args.dry, `ln ${src} -> ${dest}`)) return;
             if (!existsSync(src)) {
                 say(`managed: ${desc.pkg}: build output missing: ${desc.buildOutput} (run the build first)`);

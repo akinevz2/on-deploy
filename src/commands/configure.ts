@@ -22,6 +22,7 @@ import {
 } from "node:fs";
 import { checkDotsEnv, DOTS_DIR, manifestPath, readRequires, readWmPackages } from "../lib/dots";
 import { readLine, say } from "../lib/lines";
+import { dotsMakeVars } from "../lib/adapters";
 import { runApply } from "../lib/configureCore";
 import { flush } from "../lib/out";
 import { commitUserBranch, reportUserBranch } from "../lib/userBranch";
@@ -674,7 +675,7 @@ export default defineCommand({
                     for (const pkg of rules) {
                         const mf = pkgMakefile(pkg);
                         if (!mf) { results.push({ pkg, ok: false, lines: ["no Makefile"] }); continue; }
-                        const r = await runMakeSpun(mf.dir, mf.file, [], "install", `${pkg}:install`);
+                        const r = await runMakeSpun(mf.dir, mf.file, dotsMakeVars(pkg), "install", `${pkg}:install`);
                         results.push({ pkg, ok: r.ok, lines: r.lines });
                     }
                     printResults(results);

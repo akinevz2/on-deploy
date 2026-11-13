@@ -7,9 +7,13 @@
 
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { dotsMakeVars, dotsRoot } from "./adapters";
 import { manifestPath } from "./dots";
 
-export const DOTS = join(process.env.HOME!, "dots");
+/** the dots root — resolved per call from doftiles.conf (the DOTS
+ * record), defaulting to $HOME/dots. */
+export const DOTS = dotsRoot();
+
 export const STOW_STATE = join(process.env.HOME!, ".local/share/doftiles/stowed");
 
 /** stow packages = top-level dirs with .config or .local content */
@@ -180,7 +184,8 @@ export function runRule(pkg: string, rule: string): PkgResult {
     const mf = pkgMakefile(pkg);
     if (!mf) return { pkg, ok: false, lines: ["no Makefile"] };
     const p = Bun.spawnSync(
-        ["make", "-C", mf.dir, "--no-print-directory", "-f", mf.file, rule],
+        ["make", "-C", mf.dir, "--no-print-directory", "-f", mf.file, rule,
+         ...dotsMakeVars(pkg)],
         { cwd: DOTS, stdout: "pipe", stderr: "pipe" },
     );
     const lines = [

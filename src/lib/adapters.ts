@@ -31,7 +31,35 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { TRANSPORTS, type PkgManagerSpec } from "./pkgmanagers";
 
-export const DOTS = join(process.env.HOME!, "dots");
+/** the installed dots location, tracked by doftiles.conf: the record
+ * `DOTS=<path>` (an absolute path) when present, the conventional
+ * $HOME/dots otherwise. THE single source of truth — the router hands
+ * it to every adapter make run as a variable, so the adapters need no
+ * relative walk-up chains of their own. */
+export function dotsRoot(): string {
+    const fallback = join(process.env.HOME!, "dots");
+    if (existsSync(CONF)) {
+        for (const line of readFileSync(CONF, "utf8").split("\n")) {
+            if (line.startsWith("DOTS=")) {
+                const raw = line.slice(5).trim();
+                if (!raw) return fallback;
+                // $HOME (and ~/) references expand — the record stays
+                // portable across machines
+                return raw.replace(/^\$HOME\/?/, `${process.env.HOME!}/`)
+                    .replace(/^~\/?/, `${process.env.HOME!}/`);
+            }
+        }
+    }
+    return fallback;
+}
+
+/** the adapter make variables: DOTS + PKG_ROOT (the stow package
+ * root). Passed on the make command line — they override whatever the
+ * Makefile defaults to, so a non-default dots install just works. */
+export function dotsMakeVars(pkg: string): string[] {
+    const root = dotsRoot();
+    return [`DOTS=${root}`, `PKG_ROOT=${join(root, pkg)}`];
+}
 
 /** the doftiles method record (~/.config/doftiles.conf, stowed from the
  * repo through the symlink; plain writes drop through the link) */
@@ -73,7 +101,7 @@ export interface PkgDescriptor {
 }
 
 export function hasMakefile(pkg: string): boolean {
-    return existsSync(join(DOTS, pkg, ".local", "share", "depends", pkg, "Makefile"));
+    return existsSync(join(dotsRoot(), pkg, ".local", "share", "depends", pkg, "Makefile"));
 }
 
 // ── safe property helpers (one per descriptor field; each helper
@@ -131,7 +159,7 @@ export function deployedState(desc: PkgDescriptor): string {
 /** artifact adapters place a dots-owned binary here; registry adapters
  *  (herbstutil) never do, and their state is the transports' */
 export function artifactExists(desc: PkgDescriptor): boolean {
-    return desc.artifact ? existsSync(join(DOTS, desc.artifact)) : false;
+    return desc.artifact ? existsSync(join(dotsRoot(), desc.artifact)) : false;
 }
 
 function lookupTransportUnsafe(id: string): PkgManagerSpec | null {
@@ -180,8 +208,9 @@ export function consult(pkg: string): PkgDescriptor {
 
     if (ok) {
         const r = Bun.spawnSync([
-            "make", "-C", join(DOTS, pkg), "--no-print-directory",
+            "make", "-C", join(dotsRoot(), pkg), "--no-print-directory",
             "-f", `.local/share/depends/${pkg}/Makefile`, "metadata",
+            ...dotsMakeVars(pkg),
         ], { stdout: "pipe", stderr: "pipe" });
         const out = `${r.stdout ?? ""}`;
         if ((r.exitCode ?? 1) !== 0) {

@@ -21,6 +21,7 @@ import {
     checkDotsEnv, DOTS_DIR, readWmPackages,
 } from "../lib/dots";
 import { say } from "../lib/lines";
+import { dotsMakeVars } from "../lib/adapters";
 import { pkgMakefile, runMakeSpun, type PkgResult } from "../lib/pkgops";
 import { releaseTui, tuiChecklist, tuiSelect } from "../lib/tui";
 import { bind, flush, map, pure, tell, type Out } from "../lib/out";
@@ -98,7 +99,7 @@ async function walk(rule: string | undefined, rest: string[]): Promise<Out<numbe
         for (const pkg of sel) {
             const mf = pkgMakefile(pkg);
             if (!mf) { results.push({ pkg, ok: false, lines: ["no Makefile"] }); continue; }
-            const r = await runMakeSpun(mf.dir, mf.file, [], pick, `${pkg}:${pick}`);
+            const r = await runMakeSpun(mf.dir, mf.file, dotsMakeVars(pkg), pick, `${pkg}:${pick}`);
             results.push({ pkg, ok: r.ok, lines: r.lines });
         }
         return resultsOut(results);
@@ -162,7 +163,7 @@ async function walk(rule: string | undefined, rest: string[]): Promise<Out<numbe
     for (const pkg of targets) {
         const mf = pkgMakefile(pkg);
         if (!mf) { results.push({ pkg, ok: false, lines: ["no Makefile"] }); continue; }
-        const r = await runMakeSpun(mf.dir, mf.file, [], rule, `${pkg}:${rule}`);
+        const r = await runMakeSpun(mf.dir, mf.file, dotsMakeVars(pkg), rule, `${pkg}:${rule}`);
         results.push({ pkg, ok: r.ok, lines: r.lines });
     }
     const res = resultsOut(results);

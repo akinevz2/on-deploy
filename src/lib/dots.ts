@@ -5,7 +5,12 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 
-export const DOTS_DIR = join(process.env.HOME!, "dots");
+import { dotsRoot } from "./adapters";
+
+/** the dots root — the DOTS record of doftiles.conf (defaulting to
+ * $HOME/dots); everything else (manifests, the cwd gate, remotes)
+ * resolves against it. A const snapshot at module load. */
+export const DOTS_DIR = dotsRoot();
 export const INSTALL_BIN_DIR = join(process.env.HOME!, ".local/bin/install");
 
 export interface EnvCheck {
