@@ -59,6 +59,12 @@ export interface PkgDescriptor {
     /** the repositories carrying the deployment binary (bun, apt,
      * npm) — metadata repos_pkg; drives the pkg transport choice */
     reposPkg: string[];
+    /** the built binary's checkout-relative path — metadata
+     * build_output (optional; declared by the bunli-style adapters).
+     * When present the ROUTER owns the link step: managed <pkg> link
+     * hard-links dots/<pkg>/.local/share/<pkgName>/<build_output> to
+     * the package-owned artifact — no per-adapter ln recipe. */
+    buildOutput?: string;
     /** the raw make map, for anything packages add later */
     raw: Record<string, string>;
     /** did the adapter exist / metadata cleanly? */
@@ -188,6 +194,7 @@ export function consult(pkg: string): PkgDescriptor {
             raw.methods_supported = lines[2] ?? "";
             raw.repos_pkg = lines[3] ?? "";
             raw.repos_pkg_name = lines[4] ?? "";
+        raw.build_output = lines[5] ?? "";
         }
     }
 
@@ -195,6 +202,7 @@ export function consult(pkg: string): PkgDescriptor {
     const pkgName = safePkgName(raw, pkg);
     const subDir = safeSubDir(pkg, pkgName);
     const artifact = subDir ? safeArtifact(pkg, repoPkgName) : undefined;
+    const buildOutput = raw.build_output || undefined;
     return {
         pkg,
         key: safeKeyName(pkg),
@@ -205,6 +213,7 @@ export function consult(pkg: string): PkgDescriptor {
         installName: repoPkgName,
         methods: safeMethodsSupported(raw),
         reposPkg: safeReposPkg(raw),
+        buildOutput,
         raw,
         ok,
         problem,

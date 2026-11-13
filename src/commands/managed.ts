@@ -32,8 +32,8 @@
 
 import { defineCommand, option } from "@bunli/core";
 import { z } from "zod";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, linkSync, mkdirSync, unlinkSync } from "node:fs";
+import { dirname, join } from "node:path";
 import {
     consult, confGet, confSet, deployedAlready, deployedState, methodSupported,
     registryTransportInstalled,
@@ -316,6 +316,29 @@ export default defineCommand({
                 stowPkg(desc.pkg);
             }
             confSet(desc.key, resolved);
+            return;
+        }
+
+        // link — the ROUTER-OWNED link step (adapters that declare
+        // build_output delegate their link recipe here): hard-link the
+        // checkout's built binary to the package-owned artifact. One
+        // implementation, no per-adapter ln plumbing.
+        if (op === "link") {
+            if (!desc.buildOutput || !desc.artifact) {
+                say(`managed: ${desc.pkg}: no build_output declared — the adapter owns its link`);
+                process.exit(2);
+            }
+            const src = join(process.env.HOME!, "dots", desc.subDir!, desc.buildOutput);
+            const dest = join(process.env.HOME!, "dots", desc.artifact);
+            if (dryGuard(args.dry, `ln ${src} -> ${dest}`)) return;
+            if (!existsSync(src)) {
+                say(`managed: ${desc.pkg}: build output missing: ${desc.buildOutput} (run the build first)`);
+                process.exit(1);
+            }
+            mkdirSync(dirname(dest), { recursive: true });
+            try { unlinkSync(dest); } catch { /* first link */ }
+            linkSync(src, dest);
+            console.log(`  ${desc.pkg.padEnd(11)} linked ${desc.artifact}`);
             return;
         }
 
