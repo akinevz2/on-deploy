@@ -44,6 +44,7 @@ import dependsCommand from "./commands/depends";
 import detectServerCommand from "./commands/detect-server";
 import managedCommand from "./commands/managed";
 import supportsCommand from "./commands/supports";
+import contributeCommand from "./commands/contribute";
 
 const argv = process.argv.slice(2);
 if (argv.length === 0) {
@@ -103,6 +104,7 @@ cli.command(dependsCommand);
 cli.command(detectServerCommand);
 cli.command(managedCommand);
 cli.command(supportsCommand);
+cli.command(contributeCommand);
 
 // Auto-detect a reachable X display BEFORE any command runs: every
 // child this CLI spawns (package hooks, preserve, service apply)
