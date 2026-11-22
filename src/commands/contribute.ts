@@ -163,7 +163,8 @@ async function actionCommit(backend: Backend, repo: string): Promise<number> {
  * work to contribute/<ts> so the branch syncs clean to origin. */
 function actionSync(repo: string, u: string): number {
     if (git(["-C", repo, "rebase", `origin/${u}`]).code !== 0) {
-        // conflicts: park the replay by aborting and branching
+        // conflicts: branch the divergent work (abort the replay) so
+        // the branch itself syncs clean to origin
         git(["-C", repo, "rebase", "--abort"]);
         const side = `contribute/${new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14)}`;
         if (git(["-C", repo, "branch", side, "HEAD"]).code !== 0)
@@ -187,7 +188,7 @@ async function actionPublish(backend: Backend, repo: string, u: string, ahead: n
         note(`skipped push of ${repo}`);
         return 0;
     }
-    return run(`push ${repo} (${u}, ${ahead} commit(s))`, ["git", "-C", repo, "push", "origin", u], repo);
+    return run(`push ${repo} (${u}, ${ahead} commit(s))`, ["git", "push", "origin", u], repo);
 }
 
 export default defineCommand({
