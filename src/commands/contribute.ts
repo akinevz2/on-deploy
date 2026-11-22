@@ -1,8 +1,7 @@
 // src/commands/contribute.ts — synchronise the dots repository (and its
 // configured submodules) with origin. The workflow:
 //
-//   1. fetch + report: the user is INFORMED of the local changes
-//      (uncommitted modifications), the DIVERGENCE from origin's main
+//   1. fetch + report: the user is INFORMED of the local changes//      (uncommitted modifications), the DIVERGENCE from origin's main
 //      (ahead / behind), and the submodule state
 //   2. sync: local work is committed onto the CURRENT branch and
 //      replayed onto the origin tip (rebase). BRANCHING IS EXCEPTIONAL:
@@ -212,11 +211,13 @@ export default defineCommand({
         const backend = pickBackend(!!flags.yes);
 
         if (flags.report) {
+            git(["fetch", "origin", "--prune"]);
             await actionReport(backend);
             process.exit(0);
         }
 
-        // 1+2. dots: inform, commit, sync (branch only on conflict)
+        // 1+2. dots: fetch, inform, commit, sync (branch only on conflict)
+        git(["fetch", "origin", "--prune"]);
         await actionReport(backend);
         const u = currentBranch();
         if (u === "") die("detached HEAD — checkout a branch first");
