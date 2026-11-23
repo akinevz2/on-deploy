@@ -155,6 +155,13 @@ async function actionCommit(backend: Backend, repo: string): Promise<number> {
         if (deps.length > 0) git(["add", "-f", ...deps]);
     }
     const m = await input(backend, `commit message (${repo})`, "on-deploy contribute: local changes");
+    // submodule content-dirt (a status " m" line) never stages — skip
+    // the commit when the index stayed empty instead of failing
+    if (git(["-C", repo, "diff", "--cached", "--quiet"]).code === 0) {
+        note(`${repo}: nothing staged (only submodule content-dirt) — commit skipped`);
+        await pause(backend);
+        return 0;
+    }
     return run(`commit local changes (${repo})`, ["git", "-C", repo, "commit", "-m", m]);
 }
 
