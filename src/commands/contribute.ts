@@ -224,22 +224,15 @@ export default defineCommand({
             process.exit(0);
         }
 
-        // 1+2. dots: fetch, inform, commit, sync (branch only on conflict)
+        // 1. fetch + inform
         git(["fetch", "origin", "--prune"]);
         await actionReport(backend);
-        const u = currentBranch();
-        if (u === "") die("detached HEAD — checkout a branch first");
-        if (backend === "readline") {
-            await actionCommit(backend, DOTS_DIR);
-        } else if ((await actionCommit(backend, DOTS_DIR)) !== 0) {
-            process.exit(1);
-        }
-        const before = divergence(DOTS_DIR, u);
-        if (before.behind > 0 && actionSync(DOTS_DIR, u) !== 0) process.exit(1);
-        const after = divergence(DOTS_DIR, u);
-        if ((await actionPublish(backend, DOTS_DIR, u, after.ahead)) !== 0) process.exit(1);
 
-        // 3. submodules: the same inform/commit/sync/publish dance
+        // 2. SUBMODULES first (commit/sync/publish each): the dots
+        // commit pins the submodule gitlinks, so the submodule tips
+        // must be FINAL before the dots commit stages them — a dots
+        // commit made first would record stale pins and stay dirty
+        // forever.
         for (const s of submodulePaths()) {
             const sb = currentBranch(s);
             if (sb === "") {
@@ -258,6 +251,19 @@ export default defineCommand({
             if (sd.ahead === 0 && sd.behind === 0 && !treeDirty(s))
                 note(`${s}: in sync with origin`);
         }
+
+        // 3. dots LAST: the commit stages the final submodule gitlinks
+        const u = currentBranch();
+        if (u === "") die("detached HEAD — checkout a branch first");
+        if (backend === "readline") {
+            await actionCommit(backend, DOTS_DIR);
+        } else if ((await actionCommit(backend, DOTS_DIR)) !== 0) {
+            process.exit(1);
+        }
+        const before = divergence(DOTS_DIR, u);
+        if (before.behind > 0 && actionSync(DOTS_DIR, u) !== 0) process.exit(1);
+        const after = divergence(DOTS_DIR, u);
+        if ((await actionPublish(backend, DOTS_DIR, u, after.ahead)) !== 0) process.exit(1);
         note("done — the repository is synchronised with origin");
         process.exit(0);
     },
