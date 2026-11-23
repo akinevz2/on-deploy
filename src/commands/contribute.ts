@@ -51,7 +51,7 @@ function currentBranch(repo?: string): string {
 }
 
 function treeDirty(repo: string): boolean {
-    return git(["-C", repo, "status", "--porcelain", "--untracked-files=no"]).out !== "";
+    return git(["-C", repo, "status", "--porcelain"]).out !== "";
 }
 
 /** submodule paths: system.depends lines are '<pkg> <path>...' — the
@@ -118,7 +118,7 @@ async function actionReport(backend: Backend): Promise<void> {
     ];
     if (treeDirty(DOTS_DIR)) {
         lines.push("local changes (uncommitted):");
-        for (const l of git(["status", "--porcelain", "--untracked-files=no"]).out.split("\n"))
+        for (const l of git(["status", "--porcelain"]).out.split("\n"))
             lines.push(`  ${l}`);
     } else lines.push("local changes: none");
     lines.push("submodules:");
