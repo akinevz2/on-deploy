@@ -140,7 +140,7 @@ async function actionReport(backend: Backend): Promise<void> {
 
 /** commit the uncommitted work onto the current branch (no staging
  * branches — the work belongs to the branch it was made on) */
-async function actionCommit(backend: Backend, repo: string): Promise<number> {
+async function actionCommit(backend: Backend, repo: string, message?: string): Promise<number> {
     if (!treeDirty(repo)) {
         note(`${repo}: nothing to commit`);
         await pause(backend);
@@ -154,7 +154,7 @@ async function actionCommit(backend: Backend, repo: string): Promise<number> {
         }).stdout?.split("\n").filter(Boolean) ?? [];
         if (deps.length > 0) git(["add", "-f", ...deps]);
     }
-    const m = await input(backend, `commit message (${repo})`, "on-deploy contribute: local changes");
+    const m = message ?? await input(backend, `commit message (${repo})`, "on-deploy contribute: local changes");
     // submodule content-dirt (a status " m" line) never stages — skip
     // the commit when the index stayed empty instead of failing
     if (git(["-C", repo, "diff", "--cached", "--quiet"]).code === 0) {
@@ -212,6 +212,11 @@ export default defineCommand({
             description: "show the state report only, change nothing",
             short: "r",
         }),
+        message: option(z.string().optional(), {
+            argumentKind: "flag" as const,
+            description: "commit message for every commit made (skips the per-repo prompt)",
+            short: "m",
+        }),
     },
     handler: async ({ flags }) => {
         const env = checkDotsEnv();
@@ -241,8 +246,8 @@ export default defineCommand({
             }
             const sd = divergence(s, sb);
             if (treeDirty(s)) {
-                if (backend === "readline") await actionCommit(backend, s);
-                else if ((await actionCommit(backend, s)) !== 0) process.exit(1);
+                if (backend === "readline") await actionCommit(backend, s, flags.message);
+                else if ((await actionCommit(backend, s, flags.message)) !== 0) process.exit(1);
             }
             const now = divergence(s, sb);
             if (now.behind > 0 && actionSync(s, sb) !== 0) process.exit(1);
@@ -256,8 +261,8 @@ export default defineCommand({
         const u = currentBranch();
         if (u === "") die("detached HEAD — checkout a branch first");
         if (backend === "readline") {
-            await actionCommit(backend, DOTS_DIR);
-        } else if ((await actionCommit(backend, DOTS_DIR)) !== 0) {
+            await actionCommit(backend, DOTS_DIR, flags.message);
+        } else if ((await actionCommit(backend, DOTS_DIR, flags.message)) !== 0) {
             process.exit(1);
         }
         const before = divergence(DOTS_DIR, u);
